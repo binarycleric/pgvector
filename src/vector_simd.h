@@ -60,30 +60,5 @@ VectorL2SquaredDistanceNEON(int dim, float *ax, float *bx)
 
     return neon_sum + remaining_sum;
 }
-
-static inline float
-VectorInnerProductNEON(int dim, float *ax, float *bx)
-{
-    float32x4_t sum = vdupq_n_f32(0.0f);
-    float32x4_t a, b;
-    float32x2_t sum2;
-    float neon_sum, remaining_sum;
-    int i = 0;
-
-    for (; i < dim - 3; i += 4) {
-        a = vld1q_f32(&ax[i]);
-        b = vld1q_f32(&bx[i]);
-        sum = vaddq_f32(sum, vmulq_f32(a, b));
-    }
-
-    remaining_sum = 0.0f;
-    for (; i < dim; i++) {
-        remaining_sum += ax[i] * bx[i];
-    }
-
-    sum2 = vadd_f32(vget_low_f32(sum), vget_high_f32(sum));
-    neon_sum = vget_lane_f32(vpadd_f32(sum2, sum2), 0);
-    return neon_sum + remaining_sum;
-}
 #endif /* __ARM_NEON */
 #endif /* VECTOR_SIMD_H */

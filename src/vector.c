@@ -599,9 +599,6 @@ vector_l2_squared_distance(PG_FUNCTION_ARGS)
 VECTOR_TARGET_CLONES static float
 VectorInnerProduct(int dim, float *ax, float *bx)
 {
-#if defined(__ARM_NEON)
-    return VectorInnerProductNEON(dim, ax, bx);
-#else
 	float		distance = 0.0;
 
 	/* Auto-vectorized */
@@ -609,8 +606,6 @@ VectorInnerProduct(int dim, float *ax, float *bx)
 		distance += ax[i] * bx[i];
 
 	return distance;
-
-#endif
 }
 
 /*
