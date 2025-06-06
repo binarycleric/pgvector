@@ -604,15 +604,11 @@ VectorL2SquaredDistanceNEON(int dim, float *ax, float *bx)
 }
 #endif
 
-VECTOR_TARGET_CLONES static float
-VectorL2SquaredDistance(int dim, float *ax, float *bx)
+// Will still be auto-vectorized by GCC/Clang but may not be as fast as the
+// direct NEON implementation.
+static inline float
+VectorL2SquaredDistanceSimple(int dim, float *ax, float *bx)
 {
-#if defined(__ARM_NEON) || defined(__ARM_NEON__)
-    elog(DEBUG1, "Using ARM NEON for L2 squared distance");
-    return VectorL2SquaredDistanceNEON(dim, ax, bx);
-#else
-	// Fall back to simple implementation that does not use any CPU-specific SIMD
-	// instructions.
 	float		distance = 0.0;
 
 	/* Auto-vectorized */
@@ -624,6 +620,17 @@ VectorL2SquaredDistance(int dim, float *ax, float *bx)
 	}
 
 	return distance;
+}
+
+VECTOR_TARGET_CLONES static float
+VectorL2SquaredDistance(int dim, float *ax, float *bx)
+{
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+    elog(DEBUG1, "Using ARM NEON for L2 squared distance");
+    return VectorL2SquaredDistanceNEON(dim, ax, bx);
+#else
+    elog(DEBUG1, "Using simple implementation for L2 squared distance");
+    return VectorL2SquaredDistanceSimple(dim, ax, bx);
 #endif
 }
 
