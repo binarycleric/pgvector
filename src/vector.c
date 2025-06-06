@@ -35,7 +35,7 @@
 #define VECTOR_TARGET_CLONES
 #endif
 
-#if defined(__ARM_NEON)
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
 #include <arm_neon.h>
 #endif
 
@@ -546,7 +546,7 @@ halfvec_to_vector(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(result);
 }
 
-#if defined(__ARM_NEON)
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
 // Specialized implementation for ARM NEON. This may be an older CPU extension
 // compared to SVE/SVE2 but it is available on all current AWS Graviton CPUs.
 static inline float
@@ -607,7 +607,7 @@ VectorL2SquaredDistanceNEON(int dim, float *ax, float *bx)
 VECTOR_TARGET_CLONES static float
 VectorL2SquaredDistance(int dim, float *ax, float *bx)
 {
-#if defined(__ARM_NEON)
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
     return VectorL2SquaredDistanceNEON(dim, ax, bx);
 #else
 	// Fall back to simple implementation that does not use any CPU-specific SIMD
