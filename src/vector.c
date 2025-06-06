@@ -608,6 +608,7 @@ VECTOR_TARGET_CLONES static float
 VectorL2SquaredDistance(int dim, float *ax, float *bx)
 {
 #if defined(__ARM_NEON) || defined(__ARM_NEON__)
+    elog(DEBUG1, "Using ARM NEON for L2 squared distance");
     return VectorL2SquaredDistanceNEON(dim, ax, bx);
 #else
 	// Fall back to simple implementation that does not use any CPU-specific SIMD
