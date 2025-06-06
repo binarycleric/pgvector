@@ -93,6 +93,27 @@ SELECT l2_distance('[3e38]'::vector, '[-3e38]');
 SELECT l2_distance('[1,1,1,1,1,1,1,1,1]'::vector, '[1,1,1,1,1,1,1,4,5]');
 SELECT '[0,0]'::vector <-> '[3,4]';
 
+WITH openai_like_embeddings AS (
+  SELECT
+    s.id,
+    array(
+      SELECT (
+        sin(i * 0.1 + s.id * 0.01) * 0.3 +
+        cos(i * 0.05 + s.id * 0.007) * 0.2 +
+        sin(i * 0.03 + s.id * 0.013) * 0.15
+      )::float
+      FROM generate_series(1, 1536) i
+    )::vector(1536) as embedding
+  FROM generate_series(1, 100) s(id)
+)
+SELECT COUNT(*),
+       ROUND(AVG(l2_distance(v1.embedding, v2.embedding))::numeric, 5) as avg_distance,
+       ROUND(MIN(l2_distance(v1.embedding, v2.embedding))::numeric, 5) as min_distance,
+       ROUND(MAX(l2_distance(v1.embedding, v2.embedding))::numeric, 5) as max_distance
+FROM openai_like_embeddings v1
+CROSS JOIN openai_like_embeddings v2
+WHERE v1.id = 1;
+
 SELECT inner_product('[1,2]'::vector, '[3,4]');
 SELECT inner_product('[1,2]'::vector, '[3]');
 SELECT inner_product('[3e38]'::vector, '[3e38]');
