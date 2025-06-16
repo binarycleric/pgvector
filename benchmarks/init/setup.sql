@@ -16,6 +16,17 @@ CREATE TABLE benchmark_results (
 ALTER TABLE benchmark_results SET (autovacuum_enabled = false);
 ALTER TABLE benchmark_results SET (toast.autovacuum_enabled = false);
 
+-- Generate random floats similar to an OpenAI embedding
+CREATE OR REPLACE FUNCTION generate_random_floats(size integer)
+RETURNS float[] AS $$
+BEGIN
+    RETURN (
+        SELECT array_agg(random() * 2 - 1)
+        FROM generate_series(1, size)
+    );
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE OR REPLACE FUNCTION run_benchmark(
     test_name text,
     function_name text,

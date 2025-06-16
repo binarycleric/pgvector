@@ -58,13 +58,14 @@ endif
 benchmark: $(BENCHMARKS)
 	@echo "Running benchmarks..."
 	@psql -d postgres -c "SELECT 1 FROM pg_database WHERE datname = 'benchmark'" | grep -q 1 || psql -d postgres -c "CREATE DATABASE benchmark"
-	@psql -d benchmark -f benchmarks/init/setup.sql
+	@psql -d benchmark -f benchmarks/init/setup.sql > /dev/null
 	@for benchmark in $(BENCHMARKS); do \
 		echo "\nRunning $$(basename $$benchmark)..."; \
-		psql -d benchmark -f $$benchmark; \
+		psql -d benchmark -f $$benchmark > /dev/null; \
 	done
+	@echo "Generating results..."
 	@psql -d benchmark -f benchmarks/init/results.sql
-	@psql -d benchmark -f benchmarks/init/cleanup.sql
+	@psql -d benchmark -f benchmarks/init/cleanup.sql > /dev/null
 
 .PHONY: benchmark
 
