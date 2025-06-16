@@ -9,6 +9,7 @@ CREATE TABLE benchmark_results (
     min_time float8,
     max_time float8,
     stddev_time float8,
+    median_time float8,
     p95_time float8,
     p99_time float8
 );
@@ -147,6 +148,7 @@ BEGIN
         min_time,
         max_time,
         stddev_time,
+        median_time,
         p95_time,
         p99_time
     ) VALUES (
@@ -158,6 +160,7 @@ BEGIN
         iteration_times[1],  -- min is first element after sorting
         iteration_times[iterations],  -- max is last element after sorting
         sqrt(sum_squares / (iterations - 1)),  -- sample standard deviation
+        iteration_times[floor(iterations * 0.5)],  -- median
         iteration_times[floor(iterations * 0.95)],
         iteration_times[floor(iterations * 0.99)]
     );
