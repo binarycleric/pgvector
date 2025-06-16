@@ -27,6 +27,39 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION generate_vector_series(size integer)
+RETURNS vector(16) AS $$
+BEGIN
+    RETURN (
+        SELECT array_agg((0.1 + (i * 0.01))::float4)::vector
+        FROM generate_series(1, size) i
+    );
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION reverse_vector(v vector)
+RETURNS vector
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT array_agg(val::float8 ORDER BY i DESC)::vector
+  FROM unnest(v::float4[]) WITH ORDINALITY AS t(val, i);
+$$;
+
+CREATE TABLE small_vectors (
+    id integer,
+    embedding vector(16)
+);
+
+ALTER TABLE small_vectors SET (autovacuum_enabled = false);
+ALTER TABLE small_vectors SET (toast.autovacuum_enabled = false);
+
+INSERT INTO small_vectors (id, embedding)
+SELECT i, generate_random_floats(16)
+FROM generate_series(1, 100) i;
+
+ANALYZE small_vectors;
+
 CREATE OR REPLACE FUNCTION run_benchmark(
     test_name text,
     function_name text,

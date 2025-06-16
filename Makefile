@@ -61,7 +61,7 @@ benchmark: $(BENCHMARKS)
 	@psql -d benchmark -f benchmarks/init/setup.sql > /dev/null
 	@for benchmark in $(BENCHMARKS); do \
 		echo "\nRunning $$(basename $$benchmark)..."; \
-		psql -d benchmark -f $$benchmark > /dev/null; \
+		psql -d benchmark -f $$benchmark; \
 	done
 	@echo "Generating results..."
 	@psql -d benchmark -f benchmarks/init/results.sql

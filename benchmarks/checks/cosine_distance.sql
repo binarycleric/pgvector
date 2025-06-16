@@ -4,7 +4,11 @@ SELECT run_benchmark(
     'cosine_distance',
     16,
     10000,
-    'SELECT cosine_distance((array_agg((0.1 + (i * 0.01))::float4))::vector, (array_agg((0.1 + (i * 0.01))::float4))::vector) FROM generate_series(1, 16) i'
+    '
+    SELECT cosine_distance(embedding, embedding)
+    FROM small_vectors
+    LIMIT 1;
+    '
 );
 
 SELECT run_benchmark(
@@ -12,7 +16,14 @@ SELECT run_benchmark(
     'cosine_distance',
     16,
     10000,
-    'SELECT cosine_distance((array_agg((0.1 + (i * 0.01))::float4))::vector, (array_agg((-0.1 - (i * 0.01))::float4))::vector) FROM generate_series(1, 16) i'
+    '
+    SELECT cosine_distance(
+        embedding,
+        reverse_vector(embedding)
+    )
+    FROM small_vectors
+    LIMIT 1;
+    '
 );
 
 SELECT run_benchmark(
