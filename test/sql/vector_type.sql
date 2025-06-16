@@ -91,12 +91,14 @@ SELECT l2_distance('[0,0]'::vector, '[0,1]');
 SELECT l2_distance('[1,2]'::vector, '[3]');
 SELECT l2_distance('[3e38]'::vector, '[-3e38]');
 SELECT l2_distance('[1,1,1,1,1,1,1,1,1]'::vector, '[1,1,1,1,1,1,1,4,5]');
+SELECT l2_distance('[0.1,0.2,0.3]'::vector, '[0.1,0.2,0.3]'::vector);
 SELECT '[0,0]'::vector <-> '[3,4]';
 
 SELECT inner_product('[1,2]'::vector, '[3,4]');
 SELECT inner_product('[1,2]'::vector, '[3]');
 SELECT inner_product('[3e38]'::vector, '[3e38]');
 SELECT inner_product('[1,1,1,1,1,1,1,1,1]'::vector, '[1,2,3,4,5,6,7,8,9]');
+SELECT inner_product('[0.1,0.2,0.3]'::vector, '[0.1,0.2,0.3]'::vector);
 SELECT '[1,2]'::vector <#> '[3,4]';
 
 SELECT cosine_distance('[1,2]'::vector, '[2,4]');
@@ -110,6 +112,7 @@ SELECT cosine_distance('[1,1]'::vector, '[-1.1,-1.1]');
 SELECT cosine_distance('[3e38]'::vector, '[3e38]');
 SELECT cosine_distance('[1,2,3,4,5,6,7,8,9]'::vector, '[1,2,3,4,5,6,7,8,9]');
 SELECT cosine_distance('[1,2,3,4,5,6,7,8,9]'::vector, '[-1,-2,-3,-4,-5,-6,-7,-8,-9]');
+SELECT cosine_distance('[0.1,0.2,0.3]'::vector, '[0.1,0.2,0.3]'::vector);
 SELECT '[1,2]'::vector <=> '[2,4]';
 
 SELECT l1_distance('[0,0]'::vector, '[3,4]');
@@ -118,6 +121,7 @@ SELECT l1_distance('[1,2]'::vector, '[3]');
 SELECT l1_distance('[3e38]'::vector, '[-3e38]');
 SELECT l1_distance('[1,2,3,4,5,6,7,8,9]'::vector, '[1,2,3,4,5,6,7,8,9]');
 SELECT l1_distance('[1,2,3,4,5,6,7,8,9]'::vector, '[0,3,2,5,4,7,6,9,8]');
+SELECT l1_distance('[0.1,0.2,0.3]'::vector, '[0.1,0.2,0.3]'::vector);
 SELECT '[0,0]'::vector <+> '[3,4]';
 
 SELECT l2_normalize('[3,4]'::vector);
