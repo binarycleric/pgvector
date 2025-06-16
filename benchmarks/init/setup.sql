@@ -27,16 +27,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION generate_vector_series(size integer)
-RETURNS vector(16) AS $$
-BEGIN
-    RETURN (
-        SELECT array_agg((0.1 + (i * 0.01))::float4)::vector
-        FROM generate_series(1, size) i
-    );
-END;
-$$ LANGUAGE plpgsql;
-
 CREATE OR REPLACE FUNCTION reverse_vector(v vector)
 RETURNS vector
 LANGUAGE sql
@@ -60,6 +50,50 @@ FROM generate_series(1, 100) i;
 
 ANALYZE small_vectors;
 
+CREATE TABLE medium_vectors (
+    id integer,
+    embedding vector(128)
+);
+
+ALTER TABLE medium_vectors SET (autovacuum_enabled = false);
+ALTER TABLE medium_vectors SET (toast.autovacuum_enabled = false);
+
+INSERT INTO medium_vectors (id, embedding)
+SELECT i, generate_random_floats(128)
+FROM generate_series(1, 100) i;
+
+ANALYZE medium_vectors;
+
+CREATE TABLE large_vectors (
+    id integer,
+    embedding vector(1024)
+);
+
+ALTER TABLE large_vectors SET (autovacuum_enabled = false);
+ALTER TABLE large_vectors SET (toast.autovacuum_enabled = false);
+
+INSERT INTO large_vectors (id, embedding)
+SELECT i, generate_random_floats(1024)
+FROM generate_series(1, 100) i;
+
+ANALYZE large_vectors;
+
+CREATE TABLE very_large_vectors (
+    id integer,
+    embedding vector(4096)
+);
+
+ALTER TABLE very_large_vectors SET (autovacuum_enabled = false);
+ALTER TABLE very_large_vectors SET (toast.autovacuum_enabled = false);
+
+INSERT INTO very_large_vectors (id, embedding)
+SELECT i, generate_random_floats(4096)
+FROM generate_series(1, 100) i;
+
+ANALYZE very_large_vectors;
+
+-- Create a function to run a benchmark and store the results in the
+-- benchmark_results table
 CREATE OR REPLACE FUNCTION run_benchmark(
     test_name text,
     function_name text,
