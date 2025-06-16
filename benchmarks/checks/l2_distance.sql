@@ -92,7 +92,7 @@ SELECT run_benchmark(
     'large_vectors_identical',
     'l2_distance',
     1024,
-    100,
+    1000,
     '
     SELECT l2_distance(
         embedding,
@@ -107,7 +107,7 @@ SELECT run_benchmark(
     'large_vectors_opposite',
     'l2_distance',
     1024,
-    100,
+    1000,
     '
     SELECT l2_distance(
         embedding,
@@ -122,7 +122,7 @@ SELECT run_benchmark(
     'large_vectors_orthogonal',
     'l2_distance',
     1024,
-    100,
+    1000,
     '
     SELECT l2_distance(
         (array_agg((CASE WHEN i % 2 = 0 THEN 0.5 ELSE -0.5 END)::float4))::vector,

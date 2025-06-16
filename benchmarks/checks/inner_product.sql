@@ -92,7 +92,7 @@ SELECT run_benchmark(
     'large_vectors_identical',
     'inner_product',
     1024,
-    100,
+    1000,
     '
     SELECT inner_product(
         embedding,
@@ -107,7 +107,7 @@ SELECT run_benchmark(
     'large_vectors_opposite',
     'inner_product',
     1024,
-    100,
+    1000,
     '
     SELECT inner_product(
         embedding,
@@ -122,7 +122,7 @@ SELECT run_benchmark(
     'large_vectors_orthogonal',
     'inner_product',
     1024,
-    100,
+    1000,
     '
     SELECT inner_product(
         (array_agg((CASE WHEN i % 2 = 0 THEN 0.5 ELSE -0.5 END)::float4))::vector,
