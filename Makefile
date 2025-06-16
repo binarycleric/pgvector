@@ -65,7 +65,7 @@ benchmark: $(BENCHMARKS)
 	done
 	@echo "Generating results..."
 	@psql -d benchmark -f benchmarks/init/results.sql
-	@psql -d benchmark -f benchmarks/init/cleanup.sql > /dev/null
+	@psql -d benchmark -f benchmarks/init/teardown.sql > /dev/null
 
 .PHONY: benchmark
 
