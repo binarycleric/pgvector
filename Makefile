@@ -11,6 +11,9 @@ TESTS = $(wildcard test/sql/*.sql)
 REGRESS = $(patsubst test/sql/%.sql,%,$(TESTS))
 REGRESS_OPTS = --inputdir=test --load-extension=$(EXTENSION)
 
+BENCHMARKS = $(wildcard benchmarks/checks/*.sql)
+BENCHMARK_NAMES = $(patsubst benchmarks/checks/%.sql,%,$(BENCHMARKS))
+
 # To compile for portability, run: make OPTFLAGS=""
 OPTFLAGS = -march=native
 
@@ -51,6 +54,19 @@ include $(PGXS)
 ifeq ($(PROVE),)
 	PROVE = prove
 endif
+
+benchmark: $(BENCHMARKS)
+	@echo "Running benchmarks..."
+	@psql -d postgres -c "SELECT 1 FROM pg_database WHERE datname = 'benchmark'" | grep -q 1 || psql -d postgres -c "CREATE DATABASE benchmark"
+	@psql -d benchmark -f benchmarks/init/setup.sql
+	@for benchmark in $(BENCHMARKS); do \
+		echo "\nRunning $$(basename $$benchmark)..."; \
+		psql -d benchmark -f $$benchmark; \
+	done
+	@psql -d benchmark -f benchmarks/init/results.sql
+	@psql -d benchmark -f benchmarks/init/cleanup.sql
+
+.PHONY: benchmark
 
 # for Postgres < 15
 PROVE_FLAGS += -I ./test/perl

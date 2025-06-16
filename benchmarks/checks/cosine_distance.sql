@@ -1,0 +1,116 @@
+-- Small vectors (16 dimensions)
+SELECT run_benchmark(
+    'small_vectors_identical',
+    'cosine_distance',
+    16,
+    10000,
+    'SELECT cosine_distance((array_agg((0.1 + (i * 0.01))::float4))::vector, (array_agg((0.1 + (i * 0.01))::float4))::vector) FROM generate_series(1, 16) i'
+);
+
+SELECT run_benchmark(
+    'small_vectors_opposite',
+    'cosine_distance',
+    16,
+    10000,
+    'SELECT cosine_distance((array_agg((0.1 + (i * 0.01))::float4))::vector, (array_agg((-0.1 - (i * 0.01))::float4))::vector) FROM generate_series(1, 16) i'
+);
+
+SELECT run_benchmark(
+    'small_vectors_orthogonal',
+    'cosine_distance',
+    16,
+    10000,
+    'SELECT cosine_distance((array_agg((CASE WHEN i % 2 = 0 THEN 1 ELSE 0 END)::float4))::vector, (array_agg((CASE WHEN i % 2 = 1 THEN 1 ELSE 0 END)::float4))::vector) FROM generate_series(1, 16) i'
+);
+
+-- Medium vectors (128 dimensions)
+SELECT run_benchmark(
+    'medium_vectors_identical',
+    'cosine_distance',
+    128,
+    1000,
+    'SELECT cosine_distance((array_agg((0.1 + (i * 0.01))::float4))::vector, (array_agg((0.1 + (i * 0.01))::float4))::vector) FROM generate_series(1, 128) i'
+);
+
+SELECT run_benchmark(
+    'medium_vectors_opposite',
+    'cosine_distance',
+    128,
+    1000,
+    'SELECT cosine_distance((array_agg((0.1 + (i * 0.01))::float4))::vector, (array_agg((-0.1 - (i * 0.01))::float4))::vector) FROM generate_series(1, 128) i'
+);
+
+SELECT run_benchmark(
+    'medium_vectors_orthogonal',
+    'cosine_distance',
+    128,
+    1000,
+    'SELECT cosine_distance((array_agg((CASE WHEN i % 2 = 0 THEN 1 ELSE 0 END)::float4))::vector, (array_agg((CASE WHEN i % 2 = 1 THEN 1 ELSE 0 END)::float4))::vector) FROM generate_series(1, 128) i'
+);
+
+-- Large vectors (1024 dimensions)
+SELECT run_benchmark(
+    'large_vectors_identical',
+    'cosine_distance',
+    1024,
+    100,
+    'SELECT cosine_distance((array_agg((0.1 + (i * 0.01))::float4))::vector, (array_agg((0.1 + (i * 0.01))::float4))::vector) FROM generate_series(1, 1024) i'
+);
+
+SELECT run_benchmark(
+    'large_vectors_opposite',
+    'cosine_distance',
+    1024,
+    100,
+    'SELECT cosine_distance((array_agg((0.1 + (i * 0.01))::float4))::vector, (array_agg((-0.1 - (i * 0.01))::float4))::vector) FROM generate_series(1, 1024) i'
+);
+
+SELECT run_benchmark(
+    'large_vectors_orthogonal',
+    'cosine_distance',
+    1024,
+    100,
+    'SELECT cosine_distance((array_agg((CASE WHEN i % 2 = 0 THEN 1 ELSE 0 END)::float4))::vector, (array_agg((CASE WHEN i % 2 = 1 THEN 1 ELSE 0 END)::float4))::vector) FROM generate_series(1, 1024) i'
+);
+
+-- Very large vectors (4096 dimensions)
+SELECT run_benchmark(
+    'very_large_vectors_identical',
+    'cosine_distance',
+    4096,
+    1000,
+    'SELECT cosine_distance((array_agg((0.1 + (i * 0.01))::float4))::vector, (array_agg((0.1 + (i * 0.01))::float4))::vector) FROM generate_series(1, 4096) i'
+);
+
+SELECT run_benchmark(
+    'very_large_vectors_opposite',
+    'cosine_distance',
+    4096,
+    1000,
+    'SELECT cosine_distance((array_agg((0.1 + (i * 0.01))::float4))::vector, (array_agg((-0.1 - (i * 0.01))::float4))::vector) FROM generate_series(1, 4096) i'
+);
+
+SELECT run_benchmark(
+    'very_large_vectors_orthogonal',
+    'cosine_distance',
+    4096,
+    1000,
+    'SELECT cosine_distance((array_agg((CASE WHEN i % 2 = 0 THEN 1 ELSE 0 END)::float4))::vector, (array_agg((CASE WHEN i % 2 = 1 THEN 1 ELSE 0 END)::float4))::vector) FROM generate_series(1, 4096) i'
+);
+
+-- Special cases
+SELECT run_benchmark(
+    'zero_vectors',
+    'cosine_distance',
+    128,
+    1000,
+    'SELECT cosine_distance((array_agg(0::float4))::vector, (array_agg(0::float4))::vector) FROM generate_series(1, 128) i'
+);
+
+SELECT run_benchmark(
+    'extreme_values',
+    'cosine_distance',
+    128,
+    1000,
+    'SELECT cosine_distance((array_agg((CASE WHEN i % 2 = 0 THEN 1e38 ELSE -1e38 END)::float4))::vector, (array_agg((CASE WHEN i % 2 = 0 THEN 1e38 ELSE -1e38 END)::float4))::vector) FROM generate_series(1, 128) i'
+);
