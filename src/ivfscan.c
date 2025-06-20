@@ -41,8 +41,29 @@ GetScanLists(IndexScanDesc scan, Datum value)
 	int			listCount = 0;
 	double		maxDistance = DBL_MAX;
 
+	/*
+	 * Determine if we should use smart probes.
+	 *
+	 * Do not use smart probes if probes is 1 as this can have a negative impact
+	 * on performance. Better to just disable it rather than give the users a
+	 * potential footgun.
+	 */
+	bool			useSmartProbes = (ivfflat_smart_probes && so->probes > 1);
+	int				totalLists = 0;
+	double		minDistanceSeen = DBL_MAX;
+	double		secondMinDistance = DBL_MAX;
+	int				adaptiveProbes = so->probes;
+	bool			canEarlyTerminate = false;
+	bool			shouldEarlyTerminate = false;
+	int				listsBeforeEarlyTerminate= Max(so->probes * 2, 10);
+
+	if (useSmartProbes)
+		elog(DEBUG1, "Using smart probes");
+	else
+		elog(DEBUG1, "Not using smart probes");
+
 	/* Search all list pages */
-	while (BlockNumberIsValid(nextblkno))
+	while (BlockNumberIsValid(nextblkno) && (!useSmartProbes || !shouldEarlyTerminate))
 	{
 		Buffer		cbuf;
 		Page		cpage;
@@ -54,13 +75,37 @@ GetScanLists(IndexScanDesc scan, Datum value)
 
 		maxoffno = PageGetMaxOffsetNumber(cpage);
 
-		for (OffsetNumber offno = FirstOffsetNumber; offno <= maxoffno; offno = OffsetNumberNext(offno))
+		for (OffsetNumber offno = FirstOffsetNumber; offno <= maxoffno && (!useSmartProbes || !shouldEarlyTerminate); offno = OffsetNumberNext(offno))
 		{
 			IvfflatList list = (IvfflatList) PageGetItem(cpage, PageGetItemId(cpage, offno));
 			double		distance;
 
 			/* Use procinfo from the index instead of scan key for performance */
 			distance = DatumGetFloat8(so->distfunc(so->procinfo, so->collation, PointerGetDatum(&list->center), value));
+
+			/* Smart probe logic: track distances and check for early termination */
+			if (useSmartProbes)
+			{
+				totalLists++;
+
+				/* Track minimum distance for early termination logic */
+				if (distance < minDistanceSeen)
+				{
+					secondMinDistance = minDistanceSeen;  /* Previous minimum becomes second minimum */
+					minDistanceSeen = distance;
+				}
+				else if (distance < secondMinDistance)
+					secondMinDistance = distance;
+
+				/* Early termination: if we have enough candidates and this distance is much larger */
+				if (canEarlyTerminate && totalLists >= listsBeforeEarlyTerminate &&
+					listCount >= adaptiveProbes && distance > minDistanceSeen * ivfflat_smart_probes_distance_threshold)
+				{
+					/* Skip this and remaining lists as they're likely too far */
+					shouldEarlyTerminate = true;
+					break;
+				}
+			}
 
 			if (listCount < so->maxProbes)
 			{
@@ -76,7 +121,31 @@ GetScanLists(IndexScanDesc scan, Datum value)
 
 				/* Calculate max distance */
 				if (listCount == so->maxProbes)
+				{
 					maxDistance = GetScanList(pairingheap_first(so->listQueue))->distance;
+
+					/* Smart probe logic: adaptive probe count based on distance distribution */
+					if (useSmartProbes)
+					{
+						/* Adapt probe count based on distance distribution */
+						if (secondMinDistance < DBL_MAX && minDistanceSeen > 0)
+						{
+							double distanceRatio = secondMinDistance / minDistanceSeen;
+
+							/* If we have a clear winner (large gap), we can use fewer probes */
+							if (distanceRatio > 3.0)
+								adaptiveProbes = Max(1, so->probes / 2);
+							/* If distances are very close, we might need more probes for accuracy */
+							else if (distanceRatio < 1.2 && so->probes < so->maxProbes)
+								adaptiveProbes = Min(so->maxProbes, so->probes * 3 / 2);
+							else
+								adaptiveProbes = so->probes;
+						}
+
+						/* Enable early termination once we have a full set of candidates */
+						canEarlyTerminate = true;
+					}
+				}
 			}
 			else if (distance < maxDistance)
 			{
@@ -95,13 +164,31 @@ GetScanLists(IndexScanDesc scan, Datum value)
 			}
 		}
 
-		nextblkno = IvfflatPageGetOpaque(cpage)->nextblkno;
+		if (!useSmartProbes || !shouldEarlyTerminate)
+			nextblkno = IvfflatPageGetOpaque(cpage)->nextblkno;
 
 		UnlockReleaseBuffer(cbuf);
 	}
 
-	for (int i = listCount - 1; i >= 0; i--)
-		so->listPages[i] = GetScanList(pairingheap_remove_first(so->listQueue))->startPage;
+	/* Store the adaptive probe count for use in GetScanItems */
+	so->adaptiveProbes = adaptiveProbes;
+
+#ifdef IVFFLAT_BENCH
+	if (useSmartProbes && totalLists > 0)
+		elog(INFO, "Smart probe selection: evaluated %d/%d lists (%.1f%% savings), adaptive probes: %d->%d",
+			 totalLists, IvfflatGetLists(scan->indexRelation),
+			 (1.0 - (double)totalLists / IvfflatGetLists(scan->indexRelation)) * 100.0,
+			 so->probes, adaptiveProbes);
+#endif
+
+	/* Common post-processing for both modes */
+	for (int i = so->maxProbes - 1; i >= 0; i--)
+	{
+		if (!pairingheap_is_empty(so->listQueue))
+			so->listPages[i] = GetScanList(pairingheap_remove_first(so->listQueue))->startPage;
+		else
+			break;
+	}
 
 	Assert(pairingheap_is_empty(so->listQueue));
 }
@@ -119,8 +206,8 @@ GetScanItems(IndexScanDesc scan, Datum value)
 
 	tuplesort_reset(so->sortstate);
 
-	/* Search closest probes lists */
-	while (so->listIndex < so->maxProbes && (++batchProbes) <= so->probes)
+	/* Search closest probes lists using adaptive probe count */
+	while (so->listIndex < so->maxProbes && (++batchProbes) <= so->adaptiveProbes)
 	{
 		BlockNumber searchPage = so->listPages[so->listIndex++];
 
@@ -270,6 +357,7 @@ ivfflatbeginscan(Relation index, int nkeys, int norderbys)
 	so->first = true;
 	so->probes = probes;
 	so->maxProbes = maxProbes;
+	so->adaptiveProbes = probes;  /* Initialize to base probe count */
 	so->dimensions = dimensions;
 
 	/* Set support functions */
@@ -325,6 +413,7 @@ ivfflatrescan(IndexScanDesc scan, ScanKey keys, int nkeys, ScanKey orderbys, int
 	so->first = true;
 	pairingheap_reset(so->listQueue);
 	so->listIndex = 0;
+	so->adaptiveProbes = so->probes;  /* Reset to base probe count */
 
 	if (keys && scan->numberOfKeys > 0)
 		memmove(scan->keyData, keys, scan->numberOfKeys * sizeof(ScanKeyData));

@@ -390,6 +390,37 @@ SELECT ...
 COMMIT;
 ```
 
+### Smart Probes
+
+Enable smart probe selection for improved performance on clustered data (off by default).
+
+```sql
+SET ivfflat.smart_probes = on;
+```
+
+This optimization provides the best performance improvements with clustered data
+where vectors are grouped into distinct regions. For uniformly distributed data,
+the performance impact is minimal.
+
+Tune the distance threshold for early termination (2.0 by default)
+
+```sql
+SET ivfflat.smart_probes_distance_threshold = 3.0;
+```
+
+Higher values are more conservative (better accuracy), lower values are more
+aggressive (better performance). Range is 1.1 to 100.0.
+
+Use `SET LOCAL` to enable it for a single query
+
+```sql
+BEGIN;
+SET LOCAL ivfflat.smart_probes = on;
+SET LOCAL ivfflat.smart_probes_distance_threshold = 2.5;
+SELECT ...
+COMMIT;
+```
+
 ### Index Build Time
 
 Speed up index creation on large tables by increasing the number of parallel workers (2 by default)

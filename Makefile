@@ -38,6 +38,8 @@ PG_CFLAGS += $(OPTFLAGS) -ftree-vectorize -fassociative-math -fno-signed-zeros -
 # Debug Clang auto-vectorization
 # PG_CFLAGS += -Rpass=loop-vectorize -Rpass-analysis=loop-vectorize
 
+# PG_CFLAGS += -DIVFFLAT_BENCH
+
 all: sql/$(EXTENSION)--$(EXTVERSION).sql
 
 sql/$(EXTENSION)--$(EXTVERSION).sql: sql/$(EXTENSION).sql
