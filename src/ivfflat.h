@@ -84,6 +84,8 @@
 extern int	ivfflat_probes;
 extern int	ivfflat_iterative_scan;
 extern int	ivfflat_max_probes;
+extern bool	ivfflat_smart_probes;
+extern double	ivfflat_smart_probes_distance_threshold;
 
 typedef enum IvfflatIterativeScanMode
 {
@@ -259,6 +261,7 @@ typedef struct IvfflatScanOpaqueData
 	const		IvfflatTypeInfo *typeInfo;
 	int			probes;
 	int			maxProbes;
+	int			adaptiveProbes;
 	int			dimensions;
 	bool		first;
 	Datum		value;

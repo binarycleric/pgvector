@@ -19,6 +19,8 @@
 int			ivfflat_probes;
 int			ivfflat_iterative_scan;
 int			ivfflat_max_probes;
+bool		ivfflat_smart_probes;
+double		ivfflat_smart_probes_distance_threshold;
 static relopt_kind ivfflat_relopt_kind;
 
 static const struct config_enum_entry ivfflat_iterative_scan_options[] = {
@@ -49,6 +51,14 @@ IvfflatInit(void)
 	DefineCustomIntVariable("ivfflat.max_probes", "Sets the max number of probes for iterative scans",
 							NULL, &ivfflat_max_probes,
 							IVFFLAT_MAX_LISTS, IVFFLAT_MIN_LISTS, IVFFLAT_MAX_LISTS, PGC_USERSET, 0, NULL, NULL, NULL);
+
+	DefineCustomBoolVariable("ivfflat.smart_probes", "Enables smart probe selection optimization",
+							 "When enabled, uses adaptive probe selection and early termination for better performance.",
+							 &ivfflat_smart_probes, false, PGC_USERSET, 0, NULL, NULL, NULL);
+
+	DefineCustomRealVariable("ivfflat.smart_probes_distance_threshold", "Distance threshold for smart probe early termination",
+							 "Higher values are more conservative (better accuracy), lower values are more aggressive (better performance). Range is 1.1 to 1000.0.",
+							 &ivfflat_smart_probes_distance_threshold, 2.0, 1.1, 1000.0, PGC_USERSET, 0, NULL, NULL, NULL);
 
 	MarkGUCPrefixReserved("ivfflat");
 }
