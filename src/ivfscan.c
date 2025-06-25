@@ -12,6 +12,9 @@
 #include "storage/bufmgr.h"
 #include "utils/memutils.h"
 
+/* Forward declaration for recall tracking */
+extern void TrackVectorQuery(Relation index, Datum query_vector, int limit, ItemPointerData *results, int num_results, FmgrInfo *distance_proc, Oid collation);
+
 #define GetScanList(ptr) pairingheap_container(IvfflatScanList, ph_node, ptr)
 #define GetScanListConst(ptr) pairingheap_const_container(IvfflatScanList, ph_node, ptr)
 
@@ -307,6 +310,18 @@ ivfflatbeginscan(Relation index, int nkeys, int norderbys)
 	so->listIndex = 0;
 	so->lists = palloc(maxProbes * sizeof(IvfflatScanList));
 
+	/* Initialize recall tracking */
+	so->query_value = (Datum) 0;
+	so->result_count = 0;
+	so->results = NULL;
+	so->results_capacity = 0;
+
+	if (pgvector_track_recall)
+	{
+		so->results_capacity = 100;  /* Initial capacity */
+		so->results = palloc(so->results_capacity * sizeof(ItemPointerData));
+	}
+
 	MemoryContextSwitchTo(oldCtx);
 
 	scan->opaque = so;
@@ -370,6 +385,9 @@ ivfflatgettuple(IndexScanDesc scan, ScanDirection dir)
 		IvfflatBench("GetScanItems", GetScanItems(scan, value));
 		so->first = false;
 		so->value = value;
+
+		/* Store query value for recall tracking */
+		so->query_value = value;
 	}
 
 	while (!tuplesort_gettupleslot(so->sortstate, true, false, so->mslot, NULL))
@@ -381,6 +399,20 @@ ivfflatgettuple(IndexScanDesc scan, ScanDirection dir)
 	}
 
 	heaptid = (ItemPointer) DatumGetPointer(slot_getattr(so->mslot, 2, &isnull));
+
+			/* Track result for recall measurement */
+		if (pgvector_track_recall && so->results != NULL)
+		{
+			/* Expand array if needed */
+			if (so->result_count >= so->results_capacity)
+			{
+				so->results_capacity *= 2;
+				so->results = repalloc(so->results,
+									   so->results_capacity * sizeof(ItemPointerData));
+			}
+			so->results[so->result_count] = *heaptid;
+			so->result_count++;
+		}
 
 	scan->xs_heaptid = *heaptid;
 	scan->xs_recheck = false;
@@ -395,6 +427,17 @@ void
 ivfflatendscan(IndexScanDesc scan)
 {
 	IvfflatScanOpaque so = (IvfflatScanOpaque) scan->opaque;
+
+	/* Track recall metrics if enabled */
+	if (pgvector_track_recall && so->results != NULL && so->result_count > 0)
+	{
+		TrackVectorQuery(scan->indexRelation, so->query_value, so->result_count,
+			so->results, so->result_count, so->procinfo, so->collation);
+	}
+
+	/* Clean up recall tracking */
+	if (so->results != NULL)
+		pfree(so->results);
 
 	/* Free any temporary files */
 	tuplesort_end(so->sortstate);

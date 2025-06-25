@@ -282,6 +282,12 @@ typedef struct IvfflatScanOpaqueData
 	BlockNumber *listPages;
 	int			listIndex;
 	IvfflatScanList *lists;
+
+	/* Recall tracking */
+	Datum		query_value;
+	int			result_count;
+	ItemPointerData *results;
+	int			results_capacity;
 }			IvfflatScanOpaqueData;
 
 typedef IvfflatScanOpaqueData * IvfflatScanOpaque;

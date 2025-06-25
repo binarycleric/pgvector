@@ -8,6 +8,9 @@
 #include "utils/float.h"
 #include "utils/memutils.h"
 
+/* Forward declaration for recall tracking */
+extern void TrackVectorQuery(Relation index, Datum query_vector, int limit, ItemPointerData *results, int num_results, FmgrInfo *distance_proc, Oid collation);
+
 /*
  * Algorithm 5 from paper
  */
@@ -144,6 +147,18 @@ hnswbeginscan(Relation index, int nkeys, int norderbys)
 	maxMemory = (double) work_mem * hnsw_scan_mem_multiplier * 1024.0 + 256;
 	so->maxMemory = Min(maxMemory, (double) SIZE_MAX);
 
+	/* Initialize recall tracking */
+	so->query_value = (Datum) 0;
+	so->result_count = 0;
+	so->results = NULL;
+	so->results_capacity = 0;
+
+	if (pgvector_track_recall)
+	{
+		so->results_capacity = 100;  /* Initial capacity */
+		so->results = palloc(so->results_capacity * sizeof(ItemPointerData));
+	}
+
 	scan->opaque = so;
 
 	return scan;
@@ -216,6 +231,10 @@ hnswgettuple(IndexScanDesc scan, ScanDirection dir)
 
 		/* Release shared lock */
 		UnlockPage(scan->indexRelation, HNSW_SCAN_LOCK, ShareLock);
+
+		/* Store query value for recall tracking */
+		so->query_value = value;
+		so->result_count = 0;
 
 		so->first = false;
 
@@ -305,6 +324,20 @@ hnswgettuple(IndexScanDesc scan, ScanDirection dir)
 
 		MemoryContextSwitchTo(oldCtx);
 
+				/* Track result for recall measurement */
+		if (pgvector_track_recall && so->results != NULL)
+		{
+			/* Expand array if needed */
+			if (so->result_count >= so->results_capacity)
+			{
+				so->results_capacity *= 2;
+				so->results = repalloc(so->results,
+									   so->results_capacity * sizeof(ItemPointerData));
+			}
+			so->results[so->result_count] = *heaptid;
+			so->result_count++;
+		}
+
 		scan->xs_heaptid = *heaptid;
 		scan->xs_recheck = false;
 		scan->xs_recheckorderby = false;
@@ -322,6 +355,17 @@ void
 hnswendscan(IndexScanDesc scan)
 {
 	HnswScanOpaque so = (HnswScanOpaque) scan->opaque;
+
+	/* Track recall metrics if enabled */
+	if (pgvector_track_recall && so->results != NULL && so->result_count > 0)
+	{
+		TrackVectorQuery(scan->indexRelation, so->query_value, so->result_count,
+						 so->results, so->result_count, so->support.procinfo, so->support.collation);
+	}
+
+	/* Clean up recall tracking */
+	if (so->results != NULL)
+		pfree(so->results);
 
 	MemoryContextDelete(so->tmpCtx);
 

@@ -378,6 +378,12 @@ typedef struct HnswScanOpaqueData
 
 	/* Support functions */
 	HnswSupport support;
+
+	/* Recall tracking */
+	Datum		query_value;
+	int			result_count;
+	ItemPointerData *results;
+	int			results_capacity;
 }			HnswScanOpaqueData;
 
 typedef HnswScanOpaqueData * HnswScanOpaque;
