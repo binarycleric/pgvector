@@ -11,7 +11,6 @@ typedef struct VectorRecallStats
 	int64		correct_matches;
 	int64		total_expected;
 	double		current_recall;
-	double		avg_results_per_query;
 	TimestampTz	last_updated;
 } VectorRecallStats;
 

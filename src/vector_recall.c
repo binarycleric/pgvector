@@ -202,9 +202,6 @@ TrackVectorQuery(Relation index, VectorRecallTracker *tracker, FmgrInfo *distanc
 		entry->stats.correct_matches += estimated_correct;
 		entry->stats.total_expected += estimated_expected;
 
-		if (entry->stats.total_queries > 0)
-			entry->stats.avg_results_per_query = (double) entry->stats.total_results_returned / entry->stats.total_queries;
-
 		if (entry->stats.total_expected > 0)
 			entry->stats.current_recall = (double) entry->stats.correct_matches / entry->stats.total_expected;
 
