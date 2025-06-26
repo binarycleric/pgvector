@@ -384,6 +384,7 @@ typedef struct HnswScanOpaqueData
 	int			result_count;
 	ItemPointerData *results;
 	int			results_capacity;
+	double		max_distance; /* distance of the farthest (k-th) result */
 }			HnswScanOpaqueData;
 
 typedef HnswScanOpaqueData * HnswScanOpaque;

@@ -9,7 +9,7 @@
 #include "utils/memutils.h"
 
 /* Forward declaration for recall tracking */
-extern void TrackVectorQuery(Relation index, Datum query_vector, int limit, ItemPointerData *results, int num_results, FmgrInfo *distance_proc, Oid collation);
+extern void TrackVectorQuery(Relation index, Datum query_vector, int limit, double kth_distance, ItemPointerData *results, int num_results, FmgrInfo *distance_proc, Oid collation);
 
 /*
  * Algorithm 5 from paper
@@ -152,6 +152,7 @@ hnswbeginscan(Relation index, int nkeys, int norderbys)
 	so->result_count = 0;
 	so->results = NULL;
 	so->results_capacity = 0;
+	so->max_distance = 0.0;  /* initialize */
 
 	if (pgvector_track_recall)
 	{
@@ -336,6 +337,9 @@ hnswgettuple(IndexScanDesc scan, ScanDirection dir)
 			}
 			so->results[so->result_count] = *heaptid;
 			so->result_count++;
+			/* update max distance */
+			if (sc->distance > so->max_distance)
+				so->max_distance = sc->distance;
 		}
 
 		scan->xs_heaptid = *heaptid;
@@ -360,6 +364,7 @@ hnswendscan(IndexScanDesc scan)
 	if (pgvector_track_recall && so->results != NULL && so->result_count > 0)
 	{
 		TrackVectorQuery(scan->indexRelation, so->query_value, so->result_count,
+						 so->max_distance,
 						 so->results, so->result_count, so->support.procinfo, so->support.collation);
 	}
 

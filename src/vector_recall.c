@@ -23,6 +23,8 @@
 #include "utils/syscache.h"
 #include "utils/timestamp.h"
 #include "vector.h"
+#include "access/heapam.h"  /* for heap_getnext / heap_getattr */
+#include "access/relscan.h"
 
 /* GUC variables */
 bool		pgvector_track_recall = false;
@@ -41,7 +43,7 @@ typedef struct VectorRecallStats
 	TimestampTz	last_updated;
 } VectorRecallStats;
 
-void TrackVectorQuery(Relation index, Datum query_vector, int limit, ItemPointerData *results, int num_results, FmgrInfo *distance_proc, Oid collation);
+void TrackVectorQuery(Relation index, Datum query_vector, int limit, double kth_distance, ItemPointerData *results, int num_results, FmgrInfo *distance_proc, Oid collation);
 double GetCurrentRecall(Oid indexoid);
 void ResetRecallStats(Oid indexoid);
 
@@ -112,7 +114,7 @@ InitVectorRecallTracking(void)
  * Track a vector query with safe recall estimation
  */
 void
-TrackVectorQuery(Relation index, Datum query_vector, int limit,
+TrackVectorQuery(Relation index, Datum query_vector, int limit, double kth_distance,
   ItemPointerData *results, int num_results, FmgrInfo *distance_proc,
   Oid collation)
 {
@@ -143,42 +145,62 @@ TrackVectorQuery(Relation index, Datum query_vector, int limit,
 	if (query_counter % pgvector_recall_sample_rate == 0)
 	{
 		int estimated_expected = limit;
-		/*
-     * Estimate correct matches based on result count vs expected.
-		 * If we got close to the limit, assume good recall.
-     */
 		int estimated_correct = num_results;
 
 		entry->stats.sampled_queries++;
 
-		if (num_results >= limit * 0.8)
+		/* Enhanced estimation using distance-threshold scan */
+		if (kth_distance > 0)
 		{
-			/* High result count suggests good recall */
-			estimated_correct = (int)(num_results * 0.95); /* 95% estimated accuracy */
-		}
-		else if (num_results >= limit * 0.5)
-		{
-			/* Medium result count suggests moderate recall */
-			estimated_correct = (int)(num_results * 0.85); /* 85% estimated accuracy */
-		}
-		else
-		{
-			/* Low result count might indicate filtering or small dataset */
-			estimated_correct = (int)(num_results * 0.75); /* 75% estimated accuracy */
+			/* Identify heap relation and attribute number */
+			Oid heapOid = index->rd_index->indrelid;
+			int16 attnum = index->rd_index->indkey.values[0];
+			Relation heapRel = table_open(heapOid, AccessShareLock);
+			TableScanDesc heapScan = table_beginscan(heapRel, GetActiveSnapshot(), 0, NULL);
+			HeapTuple tuple;
+			int count_within = 0;
+			bool exceeded = false;
+			Datum distanceDatum;
+			bool isnull;
+			double dist;
+			TupleDesc tupDesc = RelationGetDescr(heapRel);
+
+			while ((tuple = heap_getnext(heapScan, ForwardScanDirection)) != NULL)
+			{
+				Datum value = heap_getattr(tuple, attnum, tupDesc, &isnull);
+				if (isnull)
+					continue;
+
+				distanceDatum = FunctionCall2Coll(distance_proc, collation, query_vector, value);
+				dist = DatumGetFloat8(distanceDatum);
+				if (dist <= kth_distance + DBL_EPSILON)
+				{
+					count_within++;
+					if (count_within > limit)
+					{
+						exceeded = true;
+						break;
+					}
+				}
+			}
+
+			table_endscan(heapScan);
+			table_close(heapRel, AccessShareLock);
+
+			if (exceeded)
+				estimated_expected = limit + 1; /* conservative lower bound */
+			else
+				estimated_expected = count_within;
 		}
 
 		entry->stats.correct_matches += estimated_correct;
 		entry->stats.total_expected += estimated_expected;
 
 		if (entry->stats.total_queries > 0)
-		{
 			entry->stats.avg_results_per_query = (double) entry->stats.total_results_returned / entry->stats.total_queries;
-		}
 
 		if (entry->stats.total_expected > 0)
-		{
 			entry->stats.current_recall = (double) entry->stats.correct_matches / entry->stats.total_expected;
-		}
 
 		entry->stats.last_updated = GetCurrentTransactionStartTimestamp();
 	}

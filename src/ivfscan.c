@@ -13,7 +13,7 @@
 #include "utils/memutils.h"
 
 /* Forward declaration for recall tracking */
-extern void TrackVectorQuery(Relation index, Datum query_vector, int limit, ItemPointerData *results, int num_results, FmgrInfo *distance_proc, Oid collation);
+extern void TrackVectorQuery(Relation index, Datum query_vector, int limit, double kth_distance, ItemPointerData *results, int num_results, FmgrInfo *distance_proc, Oid collation);
 
 #define GetScanList(ptr) pairingheap_container(IvfflatScanList, ph_node, ptr)
 #define GetScanListConst(ptr) pairingheap_const_container(IvfflatScanList, ph_node, ptr)
@@ -315,6 +315,7 @@ ivfflatbeginscan(Relation index, int nkeys, int norderbys)
 	so->result_count = 0;
 	so->results = NULL;
 	so->results_capacity = 0;
+	so->max_distance = 0.0;
 
 	if (pgvector_track_recall)
 	{
@@ -357,6 +358,9 @@ ivfflatgettuple(IndexScanDesc scan, ScanDirection dir)
 	IvfflatScanOpaque so = (IvfflatScanOpaque) scan->opaque;
 	ItemPointer heaptid;
 	bool		isnull;
+	double     this_distance = 0.0;
+	bool       dnull = false;
+	Datum      distDatum;
 
 	/*
 	 * Index can be used to scan backward, but Postgres doesn't support
@@ -400,19 +404,28 @@ ivfflatgettuple(IndexScanDesc scan, ScanDirection dir)
 
 	heaptid = (ItemPointer) DatumGetPointer(slot_getattr(so->mslot, 2, &isnull));
 
-			/* Track result for recall measurement */
-		if (pgvector_track_recall && so->results != NULL)
+	/* distance of this result */
+	distDatum = slot_getattr(so->mslot, 1, &dnull);
+	if (!dnull)
+	{
+		this_distance = DatumGetFloat8(distDatum);
+		if (this_distance > so->max_distance)
+			so->max_distance = this_distance;
+	}
+
+	/* Track result for recall measurement */
+	if (pgvector_track_recall && so->results != NULL)
+	{
+		/* Expand array if needed */
+		if (so->result_count >= so->results_capacity)
 		{
-			/* Expand array if needed */
-			if (so->result_count >= so->results_capacity)
-			{
-				so->results_capacity *= 2;
-				so->results = repalloc(so->results,
-									   so->results_capacity * sizeof(ItemPointerData));
-			}
-			so->results[so->result_count] = *heaptid;
-			so->result_count++;
+			so->results_capacity *= 2;
+			so->results = repalloc(so->results,
+								   so->results_capacity * sizeof(ItemPointerData));
 		}
+		so->results[so->result_count] = *heaptid;
+		so->result_count++;
+	}
 
 	scan->xs_heaptid = *heaptid;
 	scan->xs_recheck = false;
@@ -432,6 +445,7 @@ ivfflatendscan(IndexScanDesc scan)
 	if (pgvector_track_recall && so->results != NULL && so->result_count > 0)
 	{
 		TrackVectorQuery(scan->indexRelation, so->query_value, so->result_count,
+			so->max_distance,
 			so->results, so->result_count, so->procinfo, so->collation);
 	}
 

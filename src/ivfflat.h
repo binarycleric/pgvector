@@ -288,6 +288,7 @@ typedef struct IvfflatScanOpaqueData
 	int			result_count;
 	ItemPointerData *results;
 	int			results_capacity;
+	double		max_distance; /* distance of farthest (k-th) result */
 }			IvfflatScanOpaqueData;
 
 typedef IvfflatScanOpaqueData * IvfflatScanOpaque;
