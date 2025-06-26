@@ -677,14 +677,6 @@ The following command will sample every 100th query.
 SET pgvector.recall_sample_rate = 100;
 ```
 
-Setting `pgvector.recall_max_samples` defines the maximum number of samples to
-maintain per index. This is useful to prevent the memory from growing too large
-as recall tracking is currently implemented in memory and not persisted to disk.
-
-```sql
-SET pgvector.recall_max_samples = 1000;
-```
-
 The following command will show a summary of the recall of your indexes.
 
 ```sql
