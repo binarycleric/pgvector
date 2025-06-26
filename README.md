@@ -653,6 +653,44 @@ SELECT * FROM (
 ) ORDER BY embedding <=> '[1,2,3,4,5]' LIMIT 5;
 ```
 
+## Observability
+
+### Recall Tracking
+
+Optionally, you can enable recall tracking to monitor the recall of your indexes.
+These statistics are based on sampled queries and persist in memory, so they will
+be lost on server restart.
+
+Setting `pgvector.track_recall` to `on` enables recall tracking for all indexes.
+
+```sql
+SET pgvector.track_recall = on;
+```
+
+Setting `pgvector.recall_sample_rate` defines how often to sample the recall of
+your indexes. Be cautious with the sample rate as it does have a performance
+impact.
+
+The following command will sample every 100th query.
+
+```sql
+SET pgvector.recall_sample_rate = 100;
+```
+
+Setting `pgvector.recall_max_samples` defines the maximum number of samples to
+maintain per index. This is useful to prevent the memory from growing too large
+as recall tracking is currently implemented in memory and not persisted to disk.
+
+```sql
+SET pgvector.recall_max_samples = 1000;
+```
+
+The following command will show a summary of the recall of your indexes.
+
+```sql
+SELECT * FROM pg_vector_recall_summary();
+```
+
 ## Performance
 
 ### Tuning
