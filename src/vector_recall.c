@@ -251,8 +251,7 @@ ResetRecallStats(Oid indexoid)
 /*
  * SQL function to get recall statistics
  */
-PG_FUNCTION_INFO_V1(pg_vector_recall_stats);
-PGDLLEXPORT Datum pg_vector_recall_stats(PG_FUNCTION_ARGS);
+FUNCTION_PREFIX PG_FUNCTION_INFO_V1(pg_vector_recall_stats);
 Datum
 pg_vector_recall_stats(PG_FUNCTION_ARGS)
 {
@@ -319,8 +318,7 @@ pg_vector_recall_stats(PG_FUNCTION_ARGS)
 /*
  * SQL function to reset recall statistics for a specific index
  */
-PG_FUNCTION_INFO_V1(pg_vector_recall_reset);
-PGDLLEXPORT Datum pg_vector_recall_reset(PG_FUNCTION_ARGS);
+FUNCTION_PREFIX PG_FUNCTION_INFO_V1(pg_vector_recall_reset);
 Datum
 pg_vector_recall_reset(PG_FUNCTION_ARGS)
 {
@@ -334,8 +332,7 @@ pg_vector_recall_reset(PG_FUNCTION_ARGS)
 /*
  * SQL function to get current recall for a specific index
  */
-PG_FUNCTION_INFO_V1(pg_vector_recall_get);
-PGDLLEXPORT Datum pg_vector_recall_get(PG_FUNCTION_ARGS);
+FUNCTION_PREFIX PG_FUNCTION_INFO_V1(pg_vector_recall_get);
 Datum
 pg_vector_recall_get(PG_FUNCTION_ARGS)
 {
