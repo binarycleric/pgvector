@@ -28,7 +28,6 @@
 bool		pgvector_track_recall = false;
 int			pgvector_recall_sample_rate = 100;	/* Sample every 100th query */
 int			pgvector_recall_max_samples = 10000;
-int			pgvector_recall_exact_limit = 100;
 
 typedef struct VectorRecallStats
 {
@@ -107,15 +106,6 @@ InitVectorRecallTracking(void)
 							PGC_USERSET,
 							0,
 							NULL, NULL, NULL);
-
-	DefineCustomIntVariable("pgvector.recall_exact_limit",
-							"Maximum number of results to compute for exact recall comparison",
-							"Higher values give more accurate recall but cost more performance.",
-							&pgvector_recall_exact_limit,
-							100, 10, 1000,
-							PGC_USERSET,
-							0,
-							NULL, NULL, NULL);
 }
 
 /*
@@ -152,19 +142,15 @@ TrackVectorQuery(Relation index, Datum query_vector, int limit,
 
 	if (query_counter % pgvector_recall_sample_rate == 0)
 	{
-		int estimated_expected;
-		int estimated_correct;
-
-		entry->stats.sampled_queries++;
-
-		/* Estimate expected results based on historical patterns */
-		estimated_expected = Min(limit, pgvector_recall_exact_limit);
-
+		int estimated_expected = limit;
 		/*
      * Estimate correct matches based on result count vs expected.
 		 * If we got close to the limit, assume good recall.
      */
-		estimated_correct = num_results;
+		int estimated_correct = num_results;
+
+		entry->stats.sampled_queries++;
+
 		if (num_results >= limit * 0.8)
 		{
 			/* High result count suggests good recall */
