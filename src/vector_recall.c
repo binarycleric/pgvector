@@ -119,7 +119,7 @@ TrackVectorQuery(Relation index, VectorRecallTracker *tracker, FmgrInfo *distanc
 	if (!found)
 	{
 		MemSet(&entry->stats, 0, sizeof(VectorRecallStats));
-		entry->stats.last_updated = GetCurrentTransactionStartTimestamp();
+		entry->stats.last_updated = GetCurrentTimestamp();
 	}
 
 	entry->stats.total_queries++;
@@ -205,7 +205,7 @@ TrackVectorQuery(Relation index, VectorRecallTracker *tracker, FmgrInfo *distanc
 		if (entry->stats.total_expected > 0)
 			entry->stats.current_recall = (double) entry->stats.correct_matches / entry->stats.total_expected;
 
-		entry->stats.last_updated = GetCurrentTransactionStartTimestamp();
+		entry->stats.last_updated = GetCurrentTimestamp();
 	}
 }
 
@@ -244,7 +244,7 @@ ResetRecallStats(Oid indexoid)
 	if (entry != NULL)
 	{
 		MemSet(&entry->stats, 0, sizeof(VectorRecallStats));
-		entry->stats.last_updated = GetCurrentTransactionStartTimestamp();
+		entry->stats.last_updated = GetCurrentTimestamp();
 	}
 }
 
