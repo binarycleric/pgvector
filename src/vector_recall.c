@@ -140,8 +140,8 @@ TrackVectorQuery(Relation index, VectorRecallTracker *tracker, FmgrInfo *distanc
 			int16 attnum = index->rd_index->indkey.values[0];
 			Relation heapRel = NULL;
 			TableScanDesc heapScan = NULL;
-			int count_within = 0;
-			bool exceeded = false;
+			volatile int count_within = 0;
+			volatile bool exceeded = false;
 
 			PG_TRY();
 			{
