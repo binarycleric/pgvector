@@ -28,9 +28,8 @@
 #include "vector_recall.h"
 
 /* GUC variables */
-bool		pgvector_track_recall = false;
-int			pgvector_recall_sample_rate = 100;	/* Sample every 100th query */
-int			pgvector_recall_max_samples = 10000;
+bool	pgvector_track_recall = false;
+int		pgvector_recall_sample_rate = 100;	/* Sample every 100th query */
 
 static HTAB *recall_stats_hash = NULL;
 static MemoryContext recall_context = NULL;
@@ -78,15 +77,6 @@ InitVectorRecallTracking(void)
 							PGC_USERSET,
 							0,
 							NULL, NULL, NULL);
-
-	DefineCustomIntVariable("pgvector.recall_max_samples",
-							"Maximum number of recall samples to maintain per index",
-							"Older samples are discarded when this limit is reached.",
-							&pgvector_recall_max_samples,
-							10000, 100, 1000000,
-							PGC_USERSET,
-							0,
-							NULL, NULL, NULL);
 }
 
 void
@@ -94,32 +84,7 @@ VectorRecallTrackerInit(VectorRecallTracker *tracker)
 {
 	tracker->query_value = (Datum) 0;
 	tracker->result_count = 0;
-	tracker->results = NULL;
-	tracker->results_capacity = 0;
 	tracker->max_distance = 0.0;
-}
-
-void
-VectorRecallTrackerDefaults(VectorRecallTracker *tracker)
-{
-	tracker->results_capacity = 100; /* Initial capacity */
-	tracker->results = palloc(tracker->results_capacity * sizeof(ItemPointerData));
-}
-
-void
-VectorRecallUpdate(VectorRecallTracker *tracker, ItemPointerData *heaptid)
-{
-	if (tracker->results == NULL)
-		return;
-
-	/* Expand array if needed */
-	if (tracker->result_count >= tracker->results_capacity) {
-		tracker->results_capacity *= 2;
-		tracker->results = repalloc(tracker->results, tracker->results_capacity * sizeof(ItemPointerData));
-	}
-
-	tracker->results[tracker->result_count] = *heaptid;
-	tracker->result_count++;
 }
 
 void
@@ -129,13 +94,6 @@ VectorRecallUpdateDistance(VectorRecallTracker *tracker, double distance)
 		tracker->max_distance = distance;
 }
 
-void
-VectorRecallCleanup(VectorRecallTracker *tracker)
-{
-	if (tracker->results != NULL)
-		pfree(tracker->results);
-}
-
 /*
  * Track a vector query with safe recall estimation
  */
@@ -143,15 +101,14 @@ void
 TrackVectorQuery(Relation index, VectorRecallTracker *tracker, FmgrInfo *distance_proc, Oid collation)
 {
 	RecallStatsEntry *entry;
-	bool		found;
-	static int	query_counter = 0;
+	bool	found;
 
-	/* Don't proceed if no results were returned */
-	if (tracker->results == NULL && tracker->result_count == 0)
+	/* Don't proceed if recall tracking is disabled or no hash table */
+	if (!pgvector_track_recall || recall_stats_hash == NULL)
 		return;
 
-	/* Don't proceed if recall tracking is disabled */
-	if (recall_stats_hash == NULL)
+	/* Don't proceed if no results were returned */
+	if (tracker->result_count == 0)
 		return;
 
 	entry = (RecallStatsEntry *) hash_search(recall_stats_hash,
@@ -168,9 +125,7 @@ TrackVectorQuery(Relation index, VectorRecallTracker *tracker, FmgrInfo *distanc
 	entry->stats.total_queries++;
 	entry->stats.total_results_returned += tracker->result_count;
 
-	query_counter++;
-
-	if (query_counter % pgvector_recall_sample_rate == 0)
+	if (entry->stats.total_queries % pgvector_recall_sample_rate == 0)
 	{
 		int estimated_expected = tracker->result_count;
 		int estimated_correct = tracker->result_count;
@@ -183,43 +138,65 @@ TrackVectorQuery(Relation index, VectorRecallTracker *tracker, FmgrInfo *distanc
 			/* Identify heap relation and attribute number */
 			Oid heapOid = index->rd_index->indrelid;
 			int16 attnum = index->rd_index->indkey.values[0];
-			Relation heapRel = table_open(heapOid, AccessShareLock);
-			TableScanDesc heapScan = table_beginscan(heapRel, GetActiveSnapshot(), 0, NULL);
-			HeapTuple tuple;
+			Relation heapRel = NULL;
+			TableScanDesc heapScan = NULL;
 			int count_within = 0;
 			bool exceeded = false;
-			Datum distanceDatum;
-			bool isnull;
-			double dist;
-			TupleDesc tupDesc = RelationGetDescr(heapRel);
 
-			while ((tuple = heap_getnext(heapScan, ForwardScanDirection)) != NULL)
+			PG_TRY();
 			{
-				Datum value = heap_getattr(tuple, attnum, tupDesc, &isnull);
-				if (isnull)
-					continue;
+				HeapTuple tuple;
+				TupleDesc tupDesc;
+				Datum distanceDatum;
+				bool isnull;
+				double dist;
 
-				distanceDatum = FunctionCall2Coll(distance_proc, collation, tracker->query_value, value);
-				dist = DatumGetFloat8(distanceDatum);
-				if (dist <= tracker->max_distance + DBL_EPSILON)
+				heapRel = table_open(heapOid, AccessShareLock);
+				heapScan = table_beginscan(heapRel, GetActiveSnapshot(), 0, NULL);
+
+				tupDesc = RelationGetDescr(heapRel);
+
+				while ((tuple = heap_getnext(heapScan, ForwardScanDirection)) != NULL)
 				{
-					count_within++;
-					if (count_within > tracker->result_count)
+					Datum value = heap_getattr(tuple, attnum, tupDesc, &isnull);
+					if (isnull)
+						continue;
+
+					distanceDatum = FunctionCall2Coll(distance_proc, collation, tracker->query_value, value);
+					dist = DatumGetFloat8(distanceDatum);
+					if (dist <= tracker->max_distance + DBL_EPSILON)
 					{
-						exceeded = true;
-						break;
+						count_within++;
+						/* Early termination: we only need to know if there are more than K matches */
+						if (count_within > tracker->result_count)
+						{
+							exceeded = true;
+							break;
+						}
 					}
 				}
+
+				if (exceeded)
+					estimated_expected = tracker->result_count + 1; /* conservative lower bound */
+				else
+					estimated_expected = count_within;
 			}
+			PG_CATCH();
+			{
+				/* Ensure cleanup on error */
+				if (heapScan != NULL)
+					table_endscan(heapScan);
+				if (heapRel != NULL)
+					table_close(heapRel, AccessShareLock);
+				PG_RE_THROW();
+			}
+			PG_END_TRY();
 
-			table_endscan(heapScan);
-			table_close(heapRel, AccessShareLock);
-
-			if (exceeded)
-				estimated_expected = tracker->result_count + 1; /* conservative lower bound */
-			else
-				estimated_expected = count_within;
-
+			/* Clean up resources */
+			if (heapScan != NULL)
+				table_endscan(heapScan);
+			if (heapRel != NULL)
+				table_close(heapRel, AccessShareLock);
 		}
 
 		entry->stats.correct_matches += estimated_correct;

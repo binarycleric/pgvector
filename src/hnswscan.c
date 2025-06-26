@@ -147,10 +147,6 @@ hnswbeginscan(Relation index, int nkeys, int norderbys)
 	/* Initialize recall tracking */
 	VectorRecallTrackerInit(&so->recall_tracker);
 
-	/* Set default values if recall tracking is enabled */
-	if (pgvector_track_recall)
-		VectorRecallTrackerDefaults(&so->recall_tracker);
-
 	scan->opaque = so;
 
 	return scan;
@@ -316,9 +312,8 @@ hnswgettuple(IndexScanDesc scan, ScanDirection dir)
 
 		MemoryContextSwitchTo(oldCtx);
 
-				/* Track result for recall measurement */
 		if (pgvector_track_recall) {
-			VectorRecallUpdate(&so->recall_tracker, heaptid);
+			so->recall_tracker.result_count++;
 			VectorRecallUpdateDistance(&so->recall_tracker, sc->distance);
 		}
 
@@ -340,13 +335,7 @@ hnswendscan(IndexScanDesc scan)
 {
 	HnswScanOpaque so = (HnswScanOpaque) scan->opaque;
 
-	/* Track recall metrics if enabled */
-	if (pgvector_track_recall)
-		TrackVectorQuery(scan->indexRelation, &so->recall_tracker, so->support.procinfo, so->support.collation);
-
-
-	/* Clean up recall tracking */
-	VectorRecallCleanup(&so->recall_tracker);
+	TrackVectorQuery(scan->indexRelation, &so->recall_tracker, so->support.procinfo, so->support.collation);
 
 	MemoryContextDelete(so->tmpCtx);
 
