@@ -311,17 +311,11 @@ ivfflatbeginscan(Relation index, int nkeys, int norderbys)
 	so->lists = palloc(maxProbes * sizeof(IvfflatScanList));
 
 	/* Initialize recall tracking */
-	so->query_value = (Datum) 0;
-	so->result_count = 0;
-	so->results = NULL;
-	so->results_capacity = 0;
-	so->max_distance = 0.0;
+	VectorRecallTrackerInit(&so->recall_tracker);
 
+	/* Set default values if recall tracking is enabled */
 	if (pgvector_track_recall)
-	{
-		so->results_capacity = 100;  /* Initial capacity */
-		so->results = palloc(so->results_capacity * sizeof(ItemPointerData));
-	}
+		VectorRecallTrackerDefaults(&so->recall_tracker);
 
 	MemoryContextSwitchTo(oldCtx);
 
@@ -358,7 +352,6 @@ ivfflatgettuple(IndexScanDesc scan, ScanDirection dir)
 	IvfflatScanOpaque so = (IvfflatScanOpaque) scan->opaque;
 	ItemPointer heaptid;
 	bool		isnull;
-	double     this_distance = 0.0;
 	bool       dnull = false;
 	Datum      distDatum;
 
@@ -391,7 +384,7 @@ ivfflatgettuple(IndexScanDesc scan, ScanDirection dir)
 		so->value = value;
 
 		/* Store query value for recall tracking */
-		so->query_value = value;
+		so->recall_tracker.query_value = value;
 	}
 
 	while (!tuplesort_gettupleslot(so->sortstate, true, false, so->mslot, NULL))
@@ -407,25 +400,11 @@ ivfflatgettuple(IndexScanDesc scan, ScanDirection dir)
 	/* distance of this result */
 	distDatum = slot_getattr(so->mslot, 1, &dnull);
 	if (!dnull)
-	{
-		this_distance = DatumGetFloat8(distDatum);
-		if (this_distance > so->max_distance)
-			so->max_distance = this_distance;
-	}
+		VectorRecallUpdateDistance(&so->recall_tracker, DatumGetFloat8(distDatum));
 
 	/* Track result for recall measurement */
-	if (pgvector_track_recall && so->results != NULL)
-	{
-		/* Expand array if needed */
-		if (so->result_count >= so->results_capacity)
-		{
-			so->results_capacity *= 2;
-			so->results = repalloc(so->results,
-								   so->results_capacity * sizeof(ItemPointerData));
-		}
-		so->results[so->result_count] = *heaptid;
-		so->result_count++;
-	}
+	if (pgvector_track_recall)
+		VectorRecallUpdate(&so->recall_tracker, heaptid);
 
 	scan->xs_heaptid = *heaptid;
 	scan->xs_recheck = false;
@@ -442,16 +421,15 @@ ivfflatendscan(IndexScanDesc scan)
 	IvfflatScanOpaque so = (IvfflatScanOpaque) scan->opaque;
 
 	/* Track recall metrics if enabled */
-	if (pgvector_track_recall && so->results != NULL && so->result_count > 0)
+	if (pgvector_track_recall && so->recall_tracker.results != NULL && so->recall_tracker.result_count > 0)
 	{
-		TrackVectorQuery(scan->indexRelation, so->query_value, so->result_count,
-			so->max_distance,
-			so->results, so->result_count, so->procinfo, so->collation);
+		TrackVectorQuery(scan->indexRelation, so->recall_tracker.query_value, so->recall_tracker.result_count,
+			so->recall_tracker.max_distance,
+			so->recall_tracker.results, so->recall_tracker.result_count, so->procinfo, so->collation);
 	}
 
 	/* Clean up recall tracking */
-	if (so->results != NULL)
-		pfree(so->results);
+	VectorRecallCleanup(&so->recall_tracker);
 
 	/* Free any temporary files */
 	tuplesort_end(so->sortstate);

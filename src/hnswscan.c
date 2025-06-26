@@ -148,17 +148,11 @@ hnswbeginscan(Relation index, int nkeys, int norderbys)
 	so->maxMemory = Min(maxMemory, (double) SIZE_MAX);
 
 	/* Initialize recall tracking */
-	so->query_value = (Datum) 0;
-	so->result_count = 0;
-	so->results = NULL;
-	so->results_capacity = 0;
-	so->max_distance = 0.0;  /* initialize */
+	VectorRecallTrackerInit(&so->recall_tracker);
 
+	/* Set default values if recall tracking is enabled */
 	if (pgvector_track_recall)
-	{
-		so->results_capacity = 100;  /* Initial capacity */
-		so->results = palloc(so->results_capacity * sizeof(ItemPointerData));
-	}
+		VectorRecallTrackerDefaults(&so->recall_tracker);
 
 	scan->opaque = so;
 
@@ -234,8 +228,8 @@ hnswgettuple(IndexScanDesc scan, ScanDirection dir)
 		UnlockPage(scan->indexRelation, HNSW_SCAN_LOCK, ShareLock);
 
 		/* Store query value for recall tracking */
-		so->query_value = value;
-		so->result_count = 0;
+		so->recall_tracker.query_value = value;
+		so->recall_tracker.result_count = 0;
 
 		so->first = false;
 
@@ -326,20 +320,9 @@ hnswgettuple(IndexScanDesc scan, ScanDirection dir)
 		MemoryContextSwitchTo(oldCtx);
 
 				/* Track result for recall measurement */
-		if (pgvector_track_recall && so->results != NULL)
-		{
-			/* Expand array if needed */
-			if (so->result_count >= so->results_capacity)
-			{
-				so->results_capacity *= 2;
-				so->results = repalloc(so->results,
-									   so->results_capacity * sizeof(ItemPointerData));
-			}
-			so->results[so->result_count] = *heaptid;
-			so->result_count++;
-			/* update max distance */
-			if (sc->distance > so->max_distance)
-				so->max_distance = sc->distance;
+		if (pgvector_track_recall) {
+			VectorRecallUpdate(&so->recall_tracker, heaptid);
+			VectorRecallUpdateDistance(&so->recall_tracker, sc->distance);
 		}
 
 		scan->xs_heaptid = *heaptid;
@@ -361,16 +344,15 @@ hnswendscan(IndexScanDesc scan)
 	HnswScanOpaque so = (HnswScanOpaque) scan->opaque;
 
 	/* Track recall metrics if enabled */
-	if (pgvector_track_recall && so->results != NULL && so->result_count > 0)
+	if (pgvector_track_recall)
 	{
-		TrackVectorQuery(scan->indexRelation, so->query_value, so->result_count,
-						 so->max_distance,
-						 so->results, so->result_count, so->support.procinfo, so->support.collation);
+		TrackVectorQuery(scan->indexRelation, so->recall_tracker.query_value, so->recall_tracker.result_count,
+						 so->recall_tracker.max_distance,
+						 so->recall_tracker.results, so->recall_tracker.result_count, so->support.procinfo, so->support.collation);
 	}
 
 	/* Clean up recall tracking */
-	if (so->results != NULL)
-		pfree(so->results);
+	VectorRecallCleanup(&so->recall_tracker);
 
 	MemoryContextDelete(so->tmpCtx);
 

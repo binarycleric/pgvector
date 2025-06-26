@@ -12,6 +12,7 @@
 #include "utils/sampling.h"
 #include "utils/tuplesort.h"
 #include "vector.h"
+#include "vector_recall.h"
 
 #if PG_VERSION_NUM >= 150000
 #include "common/pg_prng.h"
@@ -284,11 +285,7 @@ typedef struct IvfflatScanOpaqueData
 	IvfflatScanList *lists;
 
 	/* Recall tracking */
-	Datum		query_value;
-	int			result_count;
-	ItemPointerData *results;
-	int			results_capacity;
-	double		max_distance; /* distance of farthest (k-th) result */
+	VectorRecallTracker recall_tracker;
 }			IvfflatScanOpaqueData;
 
 typedef IvfflatScanOpaqueData * IvfflatScanOpaque;

@@ -25,6 +25,7 @@
 #include "vector.h"
 #include "access/heapam.h"  /* for heap_getnext / heap_getattr */
 #include "access/relscan.h"
+#include "vector_recall.h"
 
 /* GUC variables */
 bool		pgvector_track_recall = false;
@@ -110,13 +111,67 @@ InitVectorRecallTracking(void)
 							NULL, NULL, NULL);
 }
 
+void
+VectorRecallTrackerInit(VectorRecallTracker *tracker)
+{
+	tracker->query_value = (Datum) 0;
+	tracker->result_count = 0;
+	tracker->results = NULL;
+	tracker->results_capacity = 0;
+	tracker->max_distance = 0.0;
+}
+
+void
+VectorRecallTrackerDefaults(VectorRecallTracker *tracker)
+{
+	tracker->results_capacity = 100; /* Initial capacity */
+	tracker->results = palloc(tracker->results_capacity * sizeof(ItemPointerData));
+}
+
+void
+VectorRecallUpdate(VectorRecallTracker *tracker, ItemPointerData *heaptid)
+{
+	if (tracker->results == NULL)
+		return;
+
+	/* Expand array if needed */
+	if (tracker->result_count >= tracker->results_capacity) {
+		tracker->results_capacity *= 2;
+		tracker->results = repalloc(tracker->results, tracker->results_capacity * sizeof(ItemPointerData));
+	}
+
+	tracker->results[tracker->result_count] = *heaptid;
+	tracker->result_count++;
+}
+
+void
+VectorRecallUpdateDistance(VectorRecallTracker *tracker, double distance)
+{
+	if (distance > tracker->max_distance)
+		tracker->max_distance = distance;
+}
+
+void
+VectorRecallCleanup(VectorRecallTracker *tracker)
+{
+	if (tracker->results != NULL)
+		pfree(tracker->results);
+}
+
 /*
  * Track a vector query with safe recall estimation
  */
 void
-TrackVectorQuery(Relation index, Datum query_vector, int limit, double kth_distance,
-  ItemPointerData *results, int num_results, FmgrInfo *distance_proc,
-  Oid collation)
+TrackVectorQuery(
+	Relation index,
+	Datum query_vector,
+	int limit,
+	double kth_distance,
+  ItemPointerData *results,
+	int num_results,
+	FmgrInfo *distance_proc,
+  Oid collation
+)
 {
 	RecallStatsEntry *entry;
 	bool		found;
