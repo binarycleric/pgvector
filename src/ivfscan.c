@@ -12,9 +12,6 @@
 #include "storage/bufmgr.h"
 #include "utils/memutils.h"
 
-/* Forward declaration for recall tracking */
-extern void TrackVectorQuery(Relation index, Datum query_vector, int limit, double kth_distance, ItemPointerData *results, int num_results, FmgrInfo *distance_proc, Oid collation);
-
 #define GetScanList(ptr) pairingheap_container(IvfflatScanList, ph_node, ptr)
 #define GetScanListConst(ptr) pairingheap_const_container(IvfflatScanList, ph_node, ptr)
 
@@ -421,12 +418,8 @@ ivfflatendscan(IndexScanDesc scan)
 	IvfflatScanOpaque so = (IvfflatScanOpaque) scan->opaque;
 
 	/* Track recall metrics if enabled */
-	if (pgvector_track_recall && so->recall_tracker.results != NULL && so->recall_tracker.result_count > 0)
-	{
-		TrackVectorQuery(scan->indexRelation, so->recall_tracker.query_value, so->recall_tracker.result_count,
-			so->recall_tracker.max_distance,
-			so->recall_tracker.results, so->recall_tracker.result_count, so->procinfo, so->collation);
-	}
+	if (pgvector_track_recall)
+		TrackVectorQuery(scan->indexRelation, &so->recall_tracker, so->procinfo, so->collation);
 
 	/* Clean up recall tracking */
 	VectorRecallCleanup(&so->recall_tracker);

@@ -8,9 +8,6 @@
 #include "utils/float.h"
 #include "utils/memutils.h"
 
-/* Forward declaration for recall tracking */
-extern void TrackVectorQuery(Relation index, Datum query_vector, int limit, double kth_distance, ItemPointerData *results, int num_results, FmgrInfo *distance_proc, Oid collation);
-
 /*
  * Algorithm 5 from paper
  */
@@ -345,11 +342,8 @@ hnswendscan(IndexScanDesc scan)
 
 	/* Track recall metrics if enabled */
 	if (pgvector_track_recall)
-	{
-		TrackVectorQuery(scan->indexRelation, so->recall_tracker.query_value, so->recall_tracker.result_count,
-						 so->recall_tracker.max_distance,
-						 so->recall_tracker.results, so->recall_tracker.result_count, so->support.procinfo, so->support.collation);
-	}
+		TrackVectorQuery(scan->indexRelation, &so->recall_tracker, so->support.procinfo, so->support.collation);
+
 
 	/* Clean up recall tracking */
 	VectorRecallCleanup(&so->recall_tracker);

@@ -32,30 +32,8 @@ bool		pgvector_track_recall = false;
 int			pgvector_recall_sample_rate = 100;	/* Sample every 100th query */
 int			pgvector_recall_max_samples = 10000;
 
-typedef struct VectorRecallStats
-{
-	int64		total_queries;
-	int64		sampled_queries;
-	int64		total_results_returned;
-	int64		correct_matches;
-	int64		total_expected;
-	double		current_recall;
-	double		avg_results_per_query;
-	TimestampTz	last_updated;
-} VectorRecallStats;
-
-void TrackVectorQuery(Relation index, Datum query_vector, int limit, double kth_distance, ItemPointerData *results, int num_results, FmgrInfo *distance_proc, Oid collation);
-double GetCurrentRecall(Oid indexoid);
-void ResetRecallStats(Oid indexoid);
-
 static HTAB *recall_stats_hash = NULL;
 static MemoryContext recall_context = NULL;
-
-typedef struct RecallStatsEntry
-{
-	Oid			indexoid;
-	VectorRecallStats stats;
-} RecallStatsEntry;
 
 void
 InitVectorRecallTracking(void)
@@ -162,23 +140,18 @@ VectorRecallCleanup(VectorRecallTracker *tracker)
  * Track a vector query with safe recall estimation
  */
 void
-TrackVectorQuery(
-	Relation index,
-	Datum query_vector,
-	int limit,
-	double kth_distance,
-  ItemPointerData *results,
-	int num_results,
-	FmgrInfo *distance_proc,
-  Oid collation
-)
+TrackVectorQuery(Relation index, VectorRecallTracker *tracker, FmgrInfo *distance_proc, Oid collation)
 {
 	RecallStatsEntry *entry;
 	bool		found;
 	static int	query_counter = 0;
 
-	/* Don't proceed if tracking is disabled. */
-	if (!pgvector_track_recall || recall_stats_hash == NULL)
+	/* Don't proceed if no results were returned */
+	if (tracker->results == NULL && tracker->result_count == 0)
+		return;
+
+	/* Don't proceed if recall tracking is disabled */
+	if (recall_stats_hash == NULL)
 		return;
 
 	entry = (RecallStatsEntry *) hash_search(recall_stats_hash,
@@ -193,19 +166,19 @@ TrackVectorQuery(
 	}
 
 	entry->stats.total_queries++;
-	entry->stats.total_results_returned += num_results;
+	entry->stats.total_results_returned += tracker->result_count;
 
 	query_counter++;
 
 	if (query_counter % pgvector_recall_sample_rate == 0)
 	{
-		int estimated_expected = limit;
-		int estimated_correct = num_results;
+		int estimated_expected = tracker->result_count;
+		int estimated_correct = tracker->result_count;
 
 		entry->stats.sampled_queries++;
 
 		/* Enhanced estimation using distance-threshold scan */
-		if (kth_distance > 0)
+		if (tracker->max_distance > 0)
 		{
 			/* Identify heap relation and attribute number */
 			Oid heapOid = index->rd_index->indrelid;
@@ -226,12 +199,12 @@ TrackVectorQuery(
 				if (isnull)
 					continue;
 
-				distanceDatum = FunctionCall2Coll(distance_proc, collation, query_vector, value);
+				distanceDatum = FunctionCall2Coll(distance_proc, collation, tracker->query_value, value);
 				dist = DatumGetFloat8(distanceDatum);
-				if (dist <= kth_distance + DBL_EPSILON)
+				if (dist <= tracker->max_distance + DBL_EPSILON)
 				{
 					count_within++;
-					if (count_within > limit)
+					if (count_within > tracker->result_count)
 					{
 						exceeded = true;
 						break;
@@ -243,9 +216,10 @@ TrackVectorQuery(
 			table_close(heapRel, AccessShareLock);
 
 			if (exceeded)
-				estimated_expected = limit + 1; /* conservative lower bound */
+				estimated_expected = tracker->result_count + 1; /* conservative lower bound */
 			else
 				estimated_expected = count_within;
+
 		}
 
 		entry->stats.correct_matches += estimated_correct;

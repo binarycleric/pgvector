@@ -3,6 +3,27 @@
 
 #include "postgres.h"
 
+typedef struct VectorRecallStats
+{
+	int64		total_queries;
+	int64		sampled_queries;
+	int64		total_results_returned;
+	int64		correct_matches;
+	int64		total_expected;
+	double		current_recall;
+	double		avg_results_per_query;
+	TimestampTz	last_updated;
+} VectorRecallStats;
+
+double GetCurrentRecall(Oid indexoid);
+void ResetRecallStats(Oid indexoid);
+
+typedef struct RecallStatsEntry
+{
+	Oid			indexoid;
+	VectorRecallStats stats;
+} RecallStatsEntry;
+
 typedef struct VectorRecallTracker
 {
 	Datum		        query_value;
@@ -17,4 +38,7 @@ void VectorRecallTrackerDefaults(VectorRecallTracker *tracker);
 void VectorRecallUpdate(VectorRecallTracker *tracker, ItemPointerData *heaptid);
 void VectorRecallUpdateDistance(VectorRecallTracker *tracker, double distance);
 void VectorRecallCleanup(VectorRecallTracker *tracker);
+
+void TrackVectorQuery(Relation index, VectorRecallTracker *tracker, FmgrInfo *distance_proc, Oid collation);
+
 #endif
