@@ -142,7 +142,7 @@ TrackVectorQuery(Relation index, VectorRecallTracker *tracker, FmgrInfo *distanc
 				heapScan = table_beginscan(heapRel, GetActiveSnapshot(), 0, NULL);
 				tupDesc = RelationGetDescr(heapRel);
 
-								while ((tuple = heap_getnext(heapScan, ForwardScanDirection)) != NULL)
+				while ((tuple = heap_getnext(heapScan, ForwardScanDirection)) != NULL)
 				{
 					Datum value;
 
