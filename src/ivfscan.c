@@ -11,6 +11,7 @@
 #include "pgstat.h"
 #include "storage/bufmgr.h"
 #include "utils/memutils.h"
+#include "vector_recall.h"
 
 #define GetScanList(ptr) pairingheap_container(IvfflatScanList, ph_node, ptr)
 #define GetScanListConst(ptr) pairingheap_const_container(IvfflatScanList, ph_node, ptr)
@@ -390,16 +391,19 @@ ivfflatgettuple(IndexScanDesc scan, ScanDirection dir)
 		IvfflatBench("GetScanItems", GetScanItems(scan, so->value));
 	}
 
-	/* Always track for potential recall calculation */
-	distDatum = slot_getattr(so->mslot, 1, &dnull);
-	if (!dnull)
+	/* Track for potential recall calculation only if enabled */
+	if (pgvector_track_recall)
 	{
-		double distance = DatumGetFloat8(distDatum);
+		distDatum = slot_getattr(so->mslot, 1, &dnull);
+		if (!dnull)
+		{
+			double distance = DatumGetFloat8(distDatum);
 
-		if (distance > so->recall_tracker.max_distance)
-			so->recall_tracker.max_distance = distance;
+			if (distance > so->recall_tracker.max_distance)
+				so->recall_tracker.max_distance = distance;
 
-		so->recall_tracker.result_count++;
+			so->recall_tracker.result_count++;
+		}
 	}
 
 	heaptid = (ItemPointer) DatumGetPointer(slot_getattr(so->mslot, 2, &isnull));

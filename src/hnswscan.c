@@ -7,6 +7,7 @@
 #include "storage/lmgr.h"
 #include "utils/float.h"
 #include "utils/memutils.h"
+#include "vector_recall.h"
 
 /*
  * Algorithm 5 from paper
@@ -314,11 +315,14 @@ hnswgettuple(IndexScanDesc scan, ScanDirection dir)
 
 		MemoryContextSwitchTo(oldCtx);
 
-		/* Always track for potential recall calculation */
-		if (sc->distance > so->recall_tracker.max_distance)
-			so->recall_tracker.max_distance = sc->distance;
+		/* Track for potential recall calculation only if enabled */
+		if (pgvector_track_recall)
+		{
+			if (sc->distance > so->recall_tracker.max_distance)
+				so->recall_tracker.max_distance = sc->distance;
 
-		so->recall_tracker.result_count++;
+			so->recall_tracker.result_count++;
+		}
 
 		scan->xs_heaptid = *heaptid;
 		scan->xs_recheck = false;
