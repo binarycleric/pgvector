@@ -396,7 +396,11 @@ ivfflatgettuple(IndexScanDesc scan, ScanDirection dir)
 		distDatum = slot_getattr(so->mslot, 1, &dnull);
 		if (!dnull)
 		{
-			VectorRecallUpdateDistance(&so->recall_tracker, DatumGetFloat8(distDatum));
+			double distance = DatumGetFloat8(distDatum);
+
+			if (distance > so->recall_tracker.max_distance)
+				so->recall_tracker.max_distance = distance;
+
 			so->recall_tracker.result_count++;
 		}
 	}

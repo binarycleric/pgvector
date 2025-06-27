@@ -79,13 +79,6 @@ InitVectorRecallTracking(void)
 							NULL, NULL, NULL);
 }
 
-void
-VectorRecallUpdateDistance(VectorRecallTracker *tracker, double distance)
-{
-	if (distance > tracker->max_distance)
-		tracker->max_distance = distance;
-}
-
 /*
  * Track a vector query with safe recall estimation
  */

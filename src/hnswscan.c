@@ -316,7 +316,9 @@ hnswgettuple(IndexScanDesc scan, ScanDirection dir)
 
 		if (pgvector_track_recall)
 		{
-			VectorRecallUpdateDistance(&so->recall_tracker, sc->distance);
+			if (sc->distance > so->recall_tracker.max_distance)
+				so->recall_tracker.max_distance = sc->distance;
+
 			so->recall_tracker.result_count++;
 		}
 
