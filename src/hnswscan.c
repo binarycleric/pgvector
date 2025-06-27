@@ -312,9 +312,10 @@ hnswgettuple(IndexScanDesc scan, ScanDirection dir)
 
 		MemoryContextSwitchTo(oldCtx);
 
-		if (pgvector_track_recall) {
-			so->recall_tracker.result_count++;
+		if (pgvector_track_recall)
+		{
 			VectorRecallUpdateDistance(&so->recall_tracker, sc->distance);
+			so->recall_tracker.result_count++;
 		}
 
 		scan->xs_heaptid = *heaptid;

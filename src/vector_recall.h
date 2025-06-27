@@ -30,6 +30,12 @@ typedef struct VectorRecallTracker
 	double		      max_distance;     /* distance of the farthest (k-th) result */
 } VectorRecallTracker;
 
+/*
+ * Recall tracking configuration
+ */
+extern bool pgvector_track_recall;
+
+void InitVectorRecallTracking(void);
 void VectorRecallTrackerInit(VectorRecallTracker *tracker);
 void VectorRecallUpdateDistance(VectorRecallTracker *tracker, double distance);
 

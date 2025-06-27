@@ -388,14 +388,18 @@ ivfflatgettuple(IndexScanDesc scan, ScanDirection dir)
 		IvfflatBench("GetScanItems", GetScanItems(scan, so->value));
 	}
 
+	if (pgvector_track_recall)
+	{
+		/* distance of this result */
+		distDatum = slot_getattr(so->mslot, 1, &dnull);
+		if (!dnull)
+		{
+			VectorRecallUpdateDistance(&so->recall_tracker, DatumGetFloat8(distDatum));
+			so->recall_tracker.result_count++;
+		}
+	}
+
 	heaptid = (ItemPointer) DatumGetPointer(slot_getattr(so->mslot, 2, &isnull));
-
-	/* distance of this result */
-	distDatum = slot_getattr(so->mslot, 1, &dnull);
-	if (!dnull)
-		VectorRecallUpdateDistance(&so->recall_tracker, DatumGetFloat8(distDatum));
-
-	so->recall_tracker.result_count++;
 
 	scan->xs_heaptid = *heaptid;
 	scan->xs_recheck = false;

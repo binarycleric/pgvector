@@ -27,8 +27,4 @@ int			vector_cmp_internal(Vector * a, Vector * b);
 #define FUNCTION_PREFIX PGDLLEXPORT
 #endif
 
-/* Recall tracking configuration */
-extern bool pgvector_track_recall;
-extern void InitVectorRecallTracking(void);
-
 #endif
