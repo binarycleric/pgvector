@@ -421,7 +421,8 @@ ivfflatendscan(IndexScanDesc scan)
 {
 	IvfflatScanOpaque so = (IvfflatScanOpaque) scan->opaque;
 
-	TrackVectorQuery(scan->indexRelation, &so->recall_tracker, so->procinfo, so->collation);
+	if (pgvector_track_recall)
+		TrackVectorQuery(scan->indexRelation, &so->recall_tracker, so->procinfo, so->collation);
 
 	/* Free any temporary files */
 	tuplesort_end(so->sortstate);

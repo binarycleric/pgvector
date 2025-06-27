@@ -340,7 +340,8 @@ hnswendscan(IndexScanDesc scan)
 {
 	HnswScanOpaque so = (HnswScanOpaque) scan->opaque;
 
-	TrackVectorQuery(scan->indexRelation, &so->recall_tracker, so->support.procinfo, so->support.collation);
+	if (pgvector_track_recall)
+		TrackVectorQuery(scan->indexRelation, &so->recall_tracker, so->support.procinfo, so->support.collation);
 
 	MemoryContextDelete(so->tmpCtx);
 

@@ -80,8 +80,8 @@ TrackVectorQuery(Relation index, VectorRecallTracker *tracker, FmgrInfo *distanc
 	RecallStatsEntry *entry;
 	bool	found;
 
-	/* Don't proceed if recall tracking is disabled or no hash table */
-	if (!pgvector_track_recall || recall_stats_hash == NULL)
+	/* Don't proceed if no hash table */
+	if (recall_stats_hash == NULL)
 		return;
 
 	/* Don't proceed if no results were returned */
