@@ -657,31 +657,74 @@ SELECT * FROM (
 
 ### Recall Tracking
 
-Optionally, you can enable recall tracking to monitor the recall of your indexes.
-These statistics are based on sampled queries and persist in memory, so they will
-be lost on server restart.
+Monitor the quality of your approximate indexes by tracking recall metrics. Recall
+measures how many of the true nearest neighbors are found by your index - a
+recall of 1.0 (100%) means perfect accuracy, while lower values indicate the
+index is missing some nearest neighbors.
 
-Setting `pgvector.track_recall` to `on` enables recall tracking for all indexes.
+pgvector estimates recall using statistical sampling without expensive exact
+searches. When enabled, it tracks query patterns and uses distance-threshold
+counting to estimate how many relevant results exist in your data.
+
+#### Enable Recall Tracking
+
+Enable recall tracking for all vector indexes
 
 ```sql
 SET pgvector.track_recall = on;
 ```
 
-Setting `pgvector.recall_sample_rate` defines how often to sample the recall of
-your indexes. Be cautious with the sample rate as it does have a performance
-impact.
-
-The following command will sample every 100th query.
+Control sampling frequency to balance monitoring detail with performance impact
 
 ```sql
-SET pgvector.recall_sample_rate = 100;
+SET pgvector.recall_sample_rate = 100;  -- Sample every 100th query
 ```
 
-The following command will show a summary of the recall of your indexes.
+#### View Recall Statistics
+
+Get recall statistics for all indexes
+
+```sql
+SELECT * FROM pg_vector_recall_stats();
+```
+
+Get a summary with human-readable index names
 
 ```sql
 SELECT * FROM pg_vector_recall_summary();
 ```
+
+Get current recall for a specific index
+
+```sql
+SELECT pg_vector_recall_get('index_name');
+```
+
+Reset statistics for an index
+
+```sql
+SELECT pg_vector_recall_reset('index_name');
+```
+
+#### Understanding the Metrics
+
+The recall tracking provides several key metrics:
+
+- **Total Queries** - Number of vector queries processed
+- **Sampled Queries** - Number of queries where recall was estimated
+- **Results Returned** - Total results returned across all queries
+- **Correct Matches** - Estimated number of true nearest neighbors found
+- **Total Expected** - Estimated total true nearest neighbors that should exist
+- **Current Recall** - Ratio of correct matches to total expected (0.0 to 1.0)
+
+#### Function Differences
+
+- `pg_vector_recall_stats()` returns raw statistics with index OIDs
+- `pg_vector_recall_summary()` adds schema and index names for easier interpretation
+
+Both functions return the same metrics, but the summary function joins with
+PostgreSQL's system catalogs to provide human-readable names instead of just
+numeric OIDs.
 
 ## Performance
 
