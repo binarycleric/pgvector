@@ -1,0 +1,5 @@
+SET pgvector.track_recall = on;
+SET pgvector.recall_sample_rate = 1;
+
+SET pgvector.track_recall = off;
+SET pgvector.recall_sample_rate = 100;
