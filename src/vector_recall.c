@@ -2,29 +2,21 @@
 
 #include <float.h>
 
-#include "access/genam.h"
+#include "access/heapam.h"  /* for heap_getnext / heap_getattr */
 #include "access/table.h"
-#include "access/tupdesc.h"
 #include "catalog/pg_type.h"
-#include "executor/spi.h"
+#include "executor/spi.h"   /* for ReturnSetInfo, SFRM_Materialize */
 #include "executor/tuptable.h"
 #include "fmgr.h"
-#include "miscadmin.h"
-#include "storage/itemptr.h"
-#include "storage/lock.h"
+#include "miscadmin.h"      /* for work_mem */
 #include "utils/builtins.h"
 #include "utils/guc.h"
 #include "utils/hsearch.h"
-#include "utils/lsyscache.h"
 #include "utils/memutils.h"
-#include "utils/rel.h"
 #include "utils/relcache.h"
 #include "utils/snapmgr.h"
-#include "utils/syscache.h"
 #include "utils/timestamp.h"
 #include "vector.h"
-#include "access/heapam.h"  /* for heap_getnext / heap_getattr */
-#include "access/relscan.h"
 #include "vector_recall.h"
 
 /* GUC variables */
