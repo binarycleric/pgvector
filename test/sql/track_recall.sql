@@ -2,6 +2,9 @@ SET pgvector.track_recall = on;
 SET pgvector.recall_sample_rate = 1;
 SET pgvector.recall_max_scan_tuples = -1;
 
+SELECT pg_vector_recall_stats();
+SELECT pg_vector_recall_summary();
+
 SET pgvector.track_recall = off;
 SET pgvector.recall_sample_rate = 100;
 SET pgvector.recall_max_scan_tuples = 10000;
