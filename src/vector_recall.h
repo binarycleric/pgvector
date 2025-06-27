@@ -34,6 +34,7 @@ typedef struct VectorRecallTracker
  * Recall tracking configuration
  */
 extern bool pgvector_track_recall;
+extern int pgvector_recall_sample_rate;
 
 void InitVectorRecallTracking(void);
 void VectorRecallTrackerInit(VectorRecallTracker *tracker);
