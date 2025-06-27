@@ -22,6 +22,7 @@
 /* GUC variables */
 bool	pgvector_track_recall = false;
 int		pgvector_recall_sample_rate = 100;	/* Sample every 100th query */
+int		pgvector_recall_max_scan_tuples = 10000;	/* Max tuples to scan for recall estimation */
 
 static HTAB *recall_stats_hash = NULL;
 static MemoryContext recall_context = NULL;
@@ -69,6 +70,15 @@ InitVectorRecallTracking(void)
 							PGC_USERSET,
 							0,
 							NULL, NULL, NULL);
+
+	DefineCustomIntVariable("pgvector.recall_max_scan_tuples",
+							"Sets the maximum number of tuples to scan for recall estimation",
+							"Higher values provide more accurate recall estimates but may impact performance on large tables. Set to -1 for unlimited scanning.",
+							&pgvector_recall_max_scan_tuples,
+							10000, -1, INT_MAX,
+							PGC_USERSET,
+							0,
+							NULL, NULL, NULL);
 }
 
 /*
@@ -80,11 +90,10 @@ TrackVectorQuery(Relation index, VectorRecallTracker *tracker, FmgrInfo *distanc
 	RecallStatsEntry *entry;
 	bool	found;
 
-	/* Don't proceed if no hash table */
-	if (recall_stats_hash == NULL)
+	/* Early exits for disabled tracking or invalid data */
+	if (!pgvector_track_recall || recall_stats_hash == NULL)
 		return;
 
-	/* Don't proceed if no results were returned */
 	if (tracker->result_count == 0)
 		return;
 
@@ -119,6 +128,7 @@ TrackVectorQuery(Relation index, VectorRecallTracker *tracker, FmgrInfo *distanc
 			TableScanDesc heapScan = NULL;
 			volatile int count_within = 0;
 			volatile bool exceeded = false;
+			volatile int tuples_scanned = 0;
 
 			PG_TRY();
 			{
@@ -132,13 +142,20 @@ TrackVectorQuery(Relation index, VectorRecallTracker *tracker, FmgrInfo *distanc
 				heapScan = table_beginscan(heapRel, GetActiveSnapshot(), 0, NULL);
 				tupDesc = RelationGetDescr(heapRel);
 
-				while ((tuple = heap_getnext(heapScan, ForwardScanDirection)) != NULL)
+								while ((tuple = heap_getnext(heapScan, ForwardScanDirection)) != NULL)
 				{
-					Datum value = heap_getattr(tuple, attnum, tupDesc, &isnull);
+					Datum value;
+
+					tuples_scanned++;
+
+					/* Limit scan size to prevent performance issues on large tables */
+					if (pgvector_recall_max_scan_tuples > 0 && tuples_scanned > pgvector_recall_max_scan_tuples)
+						break;
+
+					value = heap_getattr(tuple, attnum, tupDesc, &isnull);
 					if (isnull)
 						continue;
 
-					/* Unsure if we actually need this check but it's here for safety */
 					if (distance_proc != NULL) {
 						distanceDatum = FunctionCall2Coll(distance_proc, collation, tracker->query_value, value);
 						dist = DatumGetFloat8(distanceDatum);
@@ -157,13 +174,7 @@ TrackVectorQuery(Relation index, VectorRecallTracker *tracker, FmgrInfo *distanc
 							}
 						}
 					} else {
-						/*
-						 * To help us debug if distance_proc is NULL. This in
-						 * theory shouldn't happen but we shouldn't let recall
-						 * tracking crash the database otherwise.
-						 */
-						elog(ERROR, "distance_proc is NULL in recall tracking for index %u (heap relation %u, attribute %d), result_count=%d, max_distance=%g",
-							 index->rd_id, heapOid, attnum, tracker->result_count, tracker->max_distance);
+						elog(ERROR, "distance_proc is NULL");
 					}
 				}
 
