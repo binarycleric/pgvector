@@ -153,7 +153,6 @@ TrackVectorQuery(Relation index, VectorRecallTracker *tracker, FmgrInfo *distanc
 
 				heapRel = table_open(heapOid, AccessShareLock);
 				heapScan = table_beginscan(heapRel, GetActiveSnapshot(), 0, NULL);
-
 				tupDesc = RelationGetDescr(heapRel);
 
 				while ((tuple = heap_getnext(heapScan, ForwardScanDirection)) != NULL)
@@ -162,17 +161,32 @@ TrackVectorQuery(Relation index, VectorRecallTracker *tracker, FmgrInfo *distanc
 					if (isnull)
 						continue;
 
-					distanceDatum = FunctionCall2Coll(distance_proc, collation, tracker->query_value, value);
-					dist = DatumGetFloat8(distanceDatum);
-					if (dist <= tracker->max_distance + DBL_EPSILON)
-					{
-						count_within++;
-						/* Early termination: we only need to know if there are more than K matches */
-						if (count_within > tracker->result_count)
+					/* Unsure if we actually need this check but it's here for safety */
+					if (distance_proc != NULL) {
+						distanceDatum = FunctionCall2Coll(distance_proc, collation, tracker->query_value, value);
+						dist = DatumGetFloat8(distanceDatum);
+						if (dist <= tracker->max_distance + DBL_EPSILON)
 						{
-							exceeded = true;
-							break;
+							count_within++;
+
+							/*
+							 * Early termination: we only need to know if there
+							 * are more than K matches
+							 */
+							if (count_within > tracker->result_count)
+							{
+								exceeded = true;
+								break;
+							}
 						}
+					} else {
+						/*
+						 * To help us debug if distance_proc is NULL. This in
+						 * theory shouldn't happen but we shouldn't let recall
+						 * tracking crash the database otherwise.
+						 */
+						elog(ERROR, "distance_proc is NULL in recall tracking for index %u (heap relation %u, attribute %d), result_count=%d, max_distance=%g",
+							 index->rd_id, heapOid, attnum, tracker->result_count, tracker->max_distance);
 					}
 				}
 
