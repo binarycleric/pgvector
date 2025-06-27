@@ -152,9 +152,9 @@ CreateGraphPages(HnswBuildState * buildstate)
 	/* Calculate sizes */
 	maxSize = HNSW_MAX_SIZE;
 
-	/* Allocate once */
-	etup = palloc0(HNSW_TUPLE_ALLOC_SIZE);
-	ntup = palloc0(HNSW_TUPLE_ALLOC_SIZE);
+	/* Allocate once - use memory pool for better performance */
+	etup = (HnswElementTuple) HnswPoolAlloc(hnsw_tuple_pool, HNSW_TUPLE_ALLOC_SIZE);
+	ntup = (HnswNeighborTuple) HnswPoolAlloc(hnsw_tuple_pool, HNSW_TUPLE_ALLOC_SIZE);
 
 	/* Prepare first page */
 	buf = HnswNewBuffer(index, forkNum);
@@ -171,9 +171,6 @@ CreateGraphPages(HnswBuildState * buildstate)
 
 		/* Update iterator */
 		iter = element->next;
-
-		/* Zero memory for each element */
-		MemSet(etup, 0, HNSW_TUPLE_ALLOC_SIZE);
 
 		/* Calculate sizes */
 		etupSize = HNSW_ELEMENT_TUPLE_SIZE(VARSIZE_ANY(valuePtr));
@@ -230,8 +227,8 @@ CreateGraphPages(HnswBuildState * buildstate)
 	entryPoint = HnswPtrAccess(base, buildstate->graph->entryPoint);
 	HnswUpdateMetaPage(index, HNSW_UPDATE_ENTRY_ALWAYS, entryPoint, insertPage, forkNum, true);
 
-	pfree(etup);
-	pfree(ntup);
+	HnswPoolFree(hnsw_tuple_pool, etup);
+	HnswPoolFree(hnsw_tuple_pool, ntup);
 }
 
 /*
@@ -247,8 +244,8 @@ WriteNeighborTuples(HnswBuildState * buildstate)
 	char	   *base = buildstate->hnswarea;
 	HnswNeighborTuple ntup;
 
-	/* Allocate once */
-	ntup = palloc0(HNSW_TUPLE_ALLOC_SIZE);
+	/* Allocate once - use memory pool for better performance */
+	ntup = (HnswNeighborTuple) HnswPoolAlloc(hnsw_tuple_pool, HNSW_TUPLE_ALLOC_SIZE);
 
 	while (!HnswPtrIsNull(base, iter))
 	{
@@ -259,9 +256,6 @@ WriteNeighborTuples(HnswBuildState * buildstate)
 
 		/* Update iterator */
 		iter = element->next;
-
-		/* Zero memory for each element */
-		MemSet(ntup, 0, HNSW_TUPLE_ALLOC_SIZE);
 
 		/* Can take a while, so ensure we can interrupt */
 		/* Needs to be called when no buffer locks are held */
@@ -281,7 +275,7 @@ WriteNeighborTuples(HnswBuildState * buildstate)
 		UnlockReleaseBuffer(buf);
 	}
 
-	pfree(ntup);
+	HnswPoolFree(hnsw_tuple_pool, ntup);
 }
 
 /*
@@ -1100,6 +1094,9 @@ BuildIndex(Relation heap, Relation index, IndexInfo *indexInfo,
 	SeedRandom(42);
 #endif
 
+	/* Initialize memory pools for better allocation performance */
+	HnswInitMemoryPools();
+
 	InitBuildState(buildstate, heap, index, indexInfo, forkNum);
 
 	BuildGraph(buildstate, forkNum);
@@ -1108,6 +1105,9 @@ BuildIndex(Relation heap, Relation index, IndexInfo *indexInfo,
 		log_newpage_range(index, forkNum, 0, RelationGetNumberOfBlocksInFork(index, forkNum), true);
 
 	FreeBuildState(buildstate);
+
+	/* Cleanup memory pools */
+	HnswCleanupMemoryPools();
 }
 
 /*

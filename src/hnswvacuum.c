@@ -210,9 +210,6 @@ RepairGraphElement(HnswVacuumState * vacuumstate, HnswElement element, HnswEleme
 	/* Find neighbors for element, skipping itself */
 	HnswFindElementNeighbors(base, element, entryPoint, index, support, m, efConstruction, true);
 
-	/* Zero memory for each element */
-	MemSet(ntup, 0, HNSW_TUPLE_ALLOC_SIZE);
-
 	/* Update neighbor tuple */
 	/* Do this before getting page to minimize locking */
 	HnswSetNeighborTuple(base, ntup, element, m);
@@ -585,7 +582,9 @@ InitVacuumState(HnswVacuumState * vacuumstate, IndexVacuumInfo *info, IndexBulkD
 	vacuumstate->callback_state = callback_state;
 	vacuumstate->efConstruction = HnswGetEfConstruction(index);
 	vacuumstate->bas = GetAccessStrategy(BAS_BULKREAD);
-	vacuumstate->ntup = palloc0(HNSW_TUPLE_ALLOC_SIZE);
+	/* Initialize memory pools for vacuum operations */
+	HnswInitMemoryPools();
+	vacuumstate->ntup = (HnswNeighborTuple) HnswPoolAlloc(hnsw_tuple_pool, HNSW_TUPLE_ALLOC_SIZE);
 	vacuumstate->tmpCtx = AllocSetContextCreate(CurrentMemoryContext,
 												"Hnsw vacuum temporary context",
 												ALLOCSET_DEFAULT_SIZES);
@@ -607,7 +606,8 @@ FreeVacuumState(HnswVacuumState * vacuumstate)
 {
 	tidhash_destroy(vacuumstate->deleted);
 	FreeAccessStrategy(vacuumstate->bas);
-	pfree(vacuumstate->ntup);
+	HnswPoolFree(hnsw_tuple_pool, vacuumstate->ntup);
+	HnswCleanupMemoryPools();
 	MemoryContextDelete(vacuumstate->tmpCtx);
 }
 

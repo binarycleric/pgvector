@@ -508,4 +508,33 @@ typedef struct OffsetHashEntry
 #define SH_DECLARE
 #include "lib/simplehash.h"
 
+/*
+ * Basic memory pool for frequent small allocations during index building
+ */
+#define HNSW_POOL_CHUNK_SIZE		HNSW_TUPLE_ALLOC_SIZE
+#define HNSW_POOL_INITIAL_CHUNKS	1024
+#define HNSW_POOL_SMALL_CHUNKS		64  /* For small datasets */
+
+typedef struct HnswMemoryPool
+{
+	char	   *pool_memory;		/* Pre-allocated memory block */
+	void	  **freelist;			/* Array of free chunk pointers */
+	int			freelist_count;		/* Number of free chunks available */
+	int			total_chunks;		/* Total chunks in pool */
+	Size		chunk_size;			/* Size of each chunk */
+	MemoryContext pool_context;		/* Memory context for pool */
+	bool		enabled;			/* Whether pooling is enabled */
+} HnswMemoryPool;
+
+/* Global memory pools for different allocation patterns */
+extern HnswMemoryPool *hnsw_tuple_pool;
+
+/* Memory pool functions */
+extern void HnswInitMemoryPools(void);
+extern void HnswCleanupMemoryPools(void);
+extern void *HnswPoolAlloc(HnswMemoryPool *pool, Size size);
+extern void HnswPoolFree(HnswMemoryPool *pool, void *ptr);
+extern HnswMemoryPool *HnswCreatePool(Size chunk_size, int initial_chunks, MemoryContext parent_context);
+extern void HnswDestroyPool(HnswMemoryPool *pool);
+
 #endif

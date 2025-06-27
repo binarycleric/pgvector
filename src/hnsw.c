@@ -29,6 +29,7 @@ int			hnsw_ef_search;
 int			hnsw_iterative_scan;
 int			hnsw_max_scan_tuples;
 double		hnsw_scan_mem_multiplier;
+
 int			hnsw_lock_tranche_id;
 static relopt_kind hnsw_relopt_kind;
 

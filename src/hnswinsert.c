@@ -164,12 +164,12 @@ AddElementOnDisk(Relation index, HnswElement e, int m, BlockNumber insertPage, B
 	maxSize = HNSW_MAX_SIZE;
 	minCombinedSize = etupSize + HNSW_NEIGHBOR_TUPLE_SIZE(0, m) + sizeof(ItemIdData);
 
-	/* Prepare element tuple */
-	etup = palloc0(etupSize);
+	/* Prepare element tuple - use memory pool for better performance */
+	etup = (HnswElementTuple) HnswPoolAlloc(hnsw_tuple_pool, etupSize);
 	HnswSetElementTuple(base, etup, e);
 
 	/* Prepare neighbor tuple */
-	ntup = palloc0(ntupSize);
+	ntup = (HnswNeighborTuple) HnswPoolAlloc(hnsw_tuple_pool, ntupSize);
 	HnswSetNeighborTuple(base, ntup, e, m);
 
 	/* Find a page (or two if needed) to insert the tuples */
@@ -338,6 +338,10 @@ AddElementOnDisk(Relation index, HnswElement e, int m, BlockNumber insertPage, B
 	/* Update the insert page */
 	if (BlockNumberIsValid(newInsertPage) && newInsertPage != insertPage)
 		*updatedInsertPage = newInsertPage;
+
+	/* Clean up pool allocations */
+	HnswPoolFree(hnsw_tuple_pool, etup);
+	HnswPoolFree(hnsw_tuple_pool, ntup);
 }
 
 /*
