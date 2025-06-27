@@ -704,13 +704,13 @@ SELECT * FROM pg_vector_recall_summary();
 Get current recall for a specific index
 
 ```sql
-SELECT pg_vector_recall_get('index_name');
+SELECT pg_vector_recall_get('index_name'::regclass::oid);
 ```
 
 Reset statistics for an index
 
 ```sql
-SELECT pg_vector_recall_reset('index_name');
+SELECT pg_vector_recall_reset('index_name'::regclass::oid);
 ```
 
 #### Function Differences
