@@ -182,6 +182,12 @@ TrackVectorQuery(Relation index, VectorRecallTracker *tracker, FmgrInfo *distanc
 					estimated_expected = tracker->result_count + 1; /* conservative lower bound */
 				else
 					estimated_expected = count_within;
+
+				/*
+				 * Correct matches is the minimum of what we returned vs what
+				 * exists within threshold
+				 */
+				estimated_correct = (estimated_expected < tracker->result_count) ? estimated_expected : tracker->result_count;
 			}
 			PG_CATCH();
 			{
