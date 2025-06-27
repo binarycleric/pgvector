@@ -145,7 +145,9 @@ hnswbeginscan(Relation index, int nkeys, int norderbys)
 	so->maxMemory = Min(maxMemory, (double) SIZE_MAX);
 
 	/* Initialize recall tracking */
-	VectorRecallTrackerInit(&so->recall_tracker);
+	so->recall_tracker.query_value = (Datum) 0;
+	so->recall_tracker.result_count = 0;
+	so->recall_tracker.max_distance = 0.0;
 
 	scan->opaque = so;
 

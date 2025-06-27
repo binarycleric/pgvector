@@ -37,7 +37,7 @@ extern bool pgvector_track_recall;
 extern int pgvector_recall_sample_rate;
 
 void InitVectorRecallTracking(void);
-void VectorRecallTrackerInit(VectorRecallTracker *tracker);
+
 void VectorRecallUpdateDistance(VectorRecallTracker *tracker, double distance);
 
 void TrackVectorQuery(Relation index, VectorRecallTracker *tracker, FmgrInfo *distance_proc, Oid collation);

@@ -80,14 +80,6 @@ InitVectorRecallTracking(void)
 }
 
 void
-VectorRecallTrackerInit(VectorRecallTracker *tracker)
-{
-	tracker->query_value = (Datum) 0;
-	tracker->result_count = 0;
-	tracker->max_distance = 0.0;
-}
-
-void
 VectorRecallUpdateDistance(VectorRecallTracker *tracker, double distance)
 {
 	if (distance > tracker->max_distance)

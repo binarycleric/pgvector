@@ -308,7 +308,9 @@ ivfflatbeginscan(Relation index, int nkeys, int norderbys)
 	so->lists = palloc(maxProbes * sizeof(IvfflatScanList));
 
 	/* Initialize recall tracking */
-	VectorRecallTrackerInit(&so->recall_tracker);
+	so->recall_tracker.query_value = (Datum) 0;
+	so->recall_tracker.result_count = 0;
+	so->recall_tracker.max_distance = 0.0;
 
 	MemoryContextSwitchTo(oldCtx);
 
