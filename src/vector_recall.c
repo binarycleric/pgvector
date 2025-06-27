@@ -179,6 +179,7 @@ TrackVectorQuery(Relation index, VectorRecallTracker *tracker, FmgrInfo *distanc
 					table_endscan(heapScan);
 				if (heapRel != NULL)
 					table_close(heapRel, AccessShareLock);
+
 				PG_RE_THROW();
 			}
 			PG_END_TRY();
