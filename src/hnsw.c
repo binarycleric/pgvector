@@ -5,10 +5,16 @@
 
 #include "access/amapi.h"
 #include "access/reloptions.h"
+#include "access/table.h"
+#include "catalog/namespace.h"
+#include "catalog/pg_type.h"
+#include "utils/lsyscache.h"
+#include "utils/rel.h"
 #include "commands/progress.h"
 #include "commands/vacuum.h"
 #include "hnsw.h"
 #include "miscadmin.h"
+#include "utils/builtins.h"
 #include "utils/float.h"
 #include "utils/guc.h"
 #include "utils/selfuncs.h"
@@ -326,4 +332,151 @@ hnswhandler(PG_FUNCTION_ARGS)
 #endif
 
 	PG_RETURN_POINTER(amroutine);
+}
+
+/*
+ * Estimate maintenance_work_mem needed for HNSW index building
+ */
+FUNCTION_PREFIX PG_FUNCTION_INFO_V1(hnsw_estimate_maintenance_work_mem);
+Datum
+hnsw_estimate_maintenance_work_mem(PG_FUNCTION_ARGS)
+{
+	Oid			table_oid = PG_GETARG_OID(0);
+	text	   *column_name_text = PG_GETARG_TEXT_PP(1);
+	int32		m = PG_GETARG_INT32(2);
+
+	Relation	heap_rel;
+	int64		num_vectors;
+	int32		dimensions;
+	Oid			vector_type;
+	char	   *column_name;
+	AttrNumber	attnum;
+	Form_pg_attribute attr;
+
+	/* Convert column name */
+	column_name = text_to_cstring(column_name_text);
+
+	/* Open the relation */
+	heap_rel = table_open(table_oid, AccessShareLock);
+
+	/* Get attribute information */
+	attnum = get_attnum(table_oid, column_name);
+	if (attnum == InvalidAttrNumber)
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_COLUMN),
+				 errmsg("column \"%s\" does not exist", column_name)));
+
+	attr = TupleDescAttr(RelationGetDescr(heap_rel), attnum - 1);
+	vector_type = attr->atttypid;
+	dimensions = attr->atttypmod;
+
+	/* Check if it's a vector-compatible type */
+	if (dimensions <= 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("column \"%s\" does not have dimensions specified", column_name)));
+
+	/* Get table size estimate from statistics */
+	num_vectors = (int64) heap_rel->rd_rel->reltuples;
+	if (num_vectors <= 0)
+	{
+		/* If no stats, use a reasonable default */
+		num_vectors = 10000;  /* Default estimate */
+	}
+
+	table_close(heap_rel, AccessShareLock);
+
+	/* Now call the core estimation logic */
+
+	Size		element_base_size;
+	Size		vector_data_size;
+	Size		total_element_size;
+	Size		graph_overhead;
+	Size		total_memory_needed;
+
+	double		ml;
+	double		avg_level;
+	double		avg_neighbor_arrays_per_element;
+	int			result_mb;
+
+	/* Validate inputs */
+	if (num_vectors <= 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("number of vectors must be positive")));
+
+	if (dimensions <= 0 || dimensions > HNSW_MAX_DIM)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("dimensions must be between 1 and %d", HNSW_MAX_DIM)));
+
+	if (m < HNSW_MIN_M || m > HNSW_MAX_M)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("m must be between %d and %d", HNSW_MIN_M, HNSW_MAX_M)));
+
+	/* Calculate base element size */
+	element_base_size = sizeof(HnswElementData);
+
+	/* Calculate vector data size based on type */
+	switch (vector_type)
+	{
+		case FLOAT4ARRAYOID:  /* vector type */
+			vector_data_size = VARHDRSZ + sizeof(int16) + sizeof(int16) + (dimensions * sizeof(float4));
+			break;
+		case VARBITOID:  /* bit type - approximate */
+			vector_data_size = VARHDRSZ + (dimensions + 7) / 8;
+			break;
+		default:  /* halfvec, sparsevec, or other - estimate as float4 */
+			vector_data_size = VARHDRSZ + sizeof(int16) + sizeof(int16) + (dimensions * sizeof(float4));
+			break;
+	}
+
+	/* Calculate average level and neighbor array overhead */
+	ml = HnswGetMl(m);
+	avg_level = ml * log((double) num_vectors);  /* Expected max level for dataset */
+	if (avg_level > HnswGetMaxLevel(m))
+		avg_level = HnswGetMaxLevel(m);
+
+	/*
+	 * Calculate expected neighbor array memory per element
+	 * Each element has neighbor arrays for levels 0 to its level
+	 * Level 0 has 2*m connections, higher levels have m connections
+	 */
+	avg_neighbor_arrays_per_element = 0;
+	for (int level = 0; level <= (int) avg_level; level++)
+	{
+		double level_probability;
+		int lm = HnswGetLayerM(m, level);
+
+		/* Probability of element being at this level or higher */
+		level_probability = pow(1.0 / m, level);
+
+		/* Add memory for neighbor array at this level */
+		avg_neighbor_arrays_per_element += level_probability * HNSW_NEIGHBOR_ARRAY_SIZE(lm);
+	}
+
+	/* Add neighbor array pointer overhead (one pointer per level) */
+	avg_neighbor_arrays_per_element += (avg_level + 1) * sizeof(HnswNeighborArrayPtr);
+
+	/* Calculate total per-element memory */
+	total_element_size = element_base_size + vector_data_size + (Size) avg_neighbor_arrays_per_element;
+
+	/* Add MAXALIGN padding overhead (approximate 15% overhead) */
+	total_element_size = total_element_size * 115 / 100;
+
+	/* Calculate graph overhead (locks, metadata, etc.) */
+	graph_overhead = sizeof(HnswGraph) + (num_vectors * sizeof(void*)) + (1024 * 1024);  /* 1MB base overhead */
+
+	/* Calculate total memory needed */
+	total_memory_needed = (num_vectors * total_element_size) + graph_overhead;
+
+	/* Convert to MB and add 20% safety margin */
+	result_mb = (int) ((total_memory_needed * 120 / 100) / (1024 * 1024));
+
+	/* Minimum of 64MB (PostgreSQL default maintenance_work_mem) */
+	if (result_mb < 64)
+		result_mb = 64;
+
+	PG_RETURN_INT32(result_mb);
 }

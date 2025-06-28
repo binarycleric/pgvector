@@ -537,4 +537,7 @@ extern void HnswPoolFree(HnswMemoryPool *pool, void *ptr);
 extern HnswMemoryPool *HnswCreatePool(Size chunk_size, int initial_chunks, MemoryContext parent_context);
 extern void HnswDestroyPool(HnswMemoryPool *pool);
 
+/* Memory estimation functions */
+extern Datum hnsw_estimate_maintenance_work_mem(PG_FUNCTION_ARGS);
+
 #endif

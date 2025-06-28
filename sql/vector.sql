@@ -278,6 +278,14 @@ CREATE FUNCTION hnsw_bit_support(internal) RETURNS internal
 CREATE FUNCTION hnsw_sparsevec_support(internal) RETURNS internal
 	AS 'MODULE_PATHNAME' LANGUAGE C;
 
+-- memory estimation functions
+
+CREATE FUNCTION hnsw_estimate_maintenance_work_mem(regclass, text, int DEFAULT 16) RETURNS int
+	AS 'MODULE_PATHNAME' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+COMMENT ON FUNCTION hnsw_estimate_maintenance_work_mem(regclass, text, int) IS
+	'estimate maintenance_work_mem needed for HNSW index building on table.column with m parameter';
+
 -- vector opclasses
 
 CREATE OPERATOR CLASS vector_ops
