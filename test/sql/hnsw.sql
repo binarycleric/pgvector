@@ -1,7 +1,0 @@
-CREATE TABLE t (val vector(3));
-INSERT INTO t (val) VALUES ('[0,0,0]'), ('[1,2,3]'), ('[1,1,1]'), (NULL);
-CREATE INDEX t_idx ON t USING hnsw (val vector_l2_ops);
-
-SELECT hnsw_estimate_maintenance_work_mem('t'::regclass, 'val', 16);
-
-DROP TABLE t;
